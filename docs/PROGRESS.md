@@ -9,12 +9,31 @@
 - [x] Phase 3 — More sources: SubDL, Addic7ed, RAR/7z, cache, source switches
   - [x] Live tests in CI with the secrets: OpenSubtitles, SubDL, Addic7ed search + download
   - [ ] Turkish sites: decide on a hidden WebView (Türkçealtyazı and PlanetDP need JavaScript)
-- [ ] Phase 4 — Convenience: embedded tracks, watch folder, drag & drop, context menu, CLI
+- [x] Phase 4 — Convenience: embedded tracks, watch folder, drag & drop, context menu, CLI
+  - [ ] Wayland drop tried on a real desktop (starts fine on weston; the drop itself untested)
+  - [ ] Windows: Explorer menu entries and drag & drop tried on a real machine
 - [ ] Phase 5 — Speech: Whisper generate / verify
 - [ ] Phase 6 — Packaging for Windows and Linux
 - [ ] Phase 7 — macOS
 
 ## Work log
+
+### 2026-10-02 — Phase 4 convenience
+- Done: English-only UI for now (Turkish bundle and picker removed, strings stay in `@tr`);
+  `probe` (embedded subtitle languages via ffprobe, counted as having the language, read in the
+  background); `submagician-cli`; settings and engine setup moved to core; open from the command
+  line; drag & drop (winit on Windows/X11, own `wl_data_device` listener on Wayland); Play / Show
+  in folder; file-manager entries (`integration`); folder watch (`watch`, 10 s settle);
+  Search as, Only missing, Restore previous.
+- Verified: unit tests (ffprobe on a real MKV with two tracks, watcher with a growing file,
+  integration files, restore swap, uri-list parsing, CLI args); CLI against Addic7ed (dry run,
+  download, skip on second run); in the app under Xvfb: opening a video from the command line,
+  Settings → Add to the menu wrote the launcher/script/service menu, the folder watch picked up a
+  new episode and saved its subtitle, Only missing filter; app started natively on Wayland
+  (weston headless) with the drop listener; core, CLI and app cross-checked for Windows
+  (`x86_64-pc-windows-gnu`).
+- Not verified: typing in Search as (Xvfb delivers no key presses to any field here), a real
+  Wayland/Windows drop, Windows Explorer entries.
 
 ### 2026-10-02 — Live provider check, Podnapisi removed
 - Done: CI job `live` ran with the repository secrets: OpenSubtitles (42 results for Inception,

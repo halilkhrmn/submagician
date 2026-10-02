@@ -54,7 +54,14 @@ APIs where a site has one, scraping only where it has none. Every source sits be
   is not applied.
 - Manual fine-tune: −1 s / −0.1 s / +0.1 s / +1 s.
 
-### Later (from Phase 2 ideas)
+### Later
+- Interface translations (Turkish first): add `.po` files back, language picker.
+- Tray icon / start minimized with the folder watch; desktop notification when a watched video
+  got its subtitle.
+- Keyboard shortcuts (Enter = download selected, F5 = search again, Ctrl+O = choose folder).
+- Sort and search in the file list; remember window size and column layout.
+- Subtitle preview: the lines around a moment, before and after a sync.
+- History: which subtitle came from where, with a way to report a bad one.
 - When candidates are close, download and try-sync the top few, keep the best fit (costs
   downloads from the daily limit, so opt-in).
 - Preview of the lines around a chosen time while fine-tuning.
@@ -73,10 +80,14 @@ APIs where a site has one, scraping only where it has none. Every source sits be
 
 ### Phase 4 — Convenience
 - Embedded subtitle tracks (ffprobe): skip videos that already carry the wanted language.
-- Watch folder: new videos get subtitles automatically.
-- Drag & drop folders/files, open containing folder, open video in the default player.
-- Explorer context menu (Windows) and file-manager action (Linux): "Find subtitles".
-- Command line mode (`submagician <folder>`) for scripts.
+- Watch folder: new videos get subtitles automatically once they stop growing.
+- Drag & drop folders/videos (Windows, X11 through winit; Wayland through our own
+  `wl_data_device`), Play, Show in folder.
+- Explorer context menu (Windows) and file-manager entries (Linux: Open with, Nautilus/Nemo/Caja
+  scripts, Dolphin service menu): "Find subtitles with SubMagician".
+- `submagician <folder|video>` opens the app there; `submagician-cli` for scripts.
+- Search as (another name for badly named files), Only missing filter, Restore previous.
+- UI is English only for now; a language system comes back later.
 
 ### Phase 5 — Speech (Whisper)
 - whisper.cpp through `whisper-rs`, model downloaded on demand by the user.

@@ -71,3 +71,19 @@ Numbered, newest last. Each: what, and why.
 25. **English-only UI for now** (owner's call). The Turkish bundle and the language picker are
     removed; strings stay in `@tr(...)`, so a language system can come back by adding `.po` files
     and `with_bundled_translations` in `build.rs`.
+26. **Settings and engine setup live in core** (`core::settings`), so the app and the CLI read
+    the same settings file and build the same providers.
+27. **A separate `submagician-cli` binary** instead of a `--cli` switch: the app is a Windows GUI
+    program (no console), and attaching a console afterwards is unreliable.
+28. **Embedded tracks count as having the language** (`MediaFile::has_language`), so batch runs
+    and the watch skip them; sync and shift still only touch subtitle files. Tracks are read in
+    the background after a scan; a batch reads a video's tracks itself before deciding.
+29. **Watch: a video is ready when its size has not changed for 10 s**, so files that are still
+    being copied or downloaded are not searched with a wrong size or hash.
+30. **File-manager entries without installers or admin rights**: HKCU registry keys on Windows;
+    on Linux a launcher (Open with, drop on the icon), Nautilus/Nemo/Caja scripts (only where
+    that file manager exists) and a Dolphin service menu. They point at the AppImage when running
+    from one.
+31. **Wayland drops through our own `wl_data_device`** on winit's connection (winit 0.30 has none
+    on Wayland). libwayland is loaded at run time (winit's `wayland-dlopen`), so X11-only systems
+    need nothing extra.
