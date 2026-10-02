@@ -17,7 +17,7 @@ use submagician_core::provider::subdl;
 use submagician_core::provider::{Candidate, SearchQuery};
 use submagician_core::settings::Settings;
 use submagician_core::sync::{self, Report, Span};
-use submagician_core::{Error, audio, integration, probe, score, watch};
+use submagician_core::{Error, audio, integration, name, output, probe, score, watch};
 use tokio::runtime::Handle;
 
 use crate::{AppWindow, CandidateRow, FileRow};
@@ -58,6 +58,8 @@ const ST_CACHE_CLEARED: i32 = 18;
 const ST_MENU_ADDED: i32 = 19;
 const ST_MENU_REMOVED: i32 = 20;
 const ST_WATCH_NEW: i32 = 21;
+const ST_RESTORED: i32 = 22;
+const ST_NO_BACKUP: i32 = 23;
 
 /// A new video in a watched folder is handled once its size has not changed for this long.
 const WATCH_SETTLE: Duration = Duration::from_secs(10);
@@ -85,6 +87,8 @@ struct Item {
     subtitle: Option<PathBuf>,
     /// Subtitle tracks inside the video were read (or cannot be: no ffprobe).
     probed: bool,
+    /// What to search for instead of what the file name says ("Search as").
+    search_as: Option<String>,
 }
 
 impl Item {
@@ -98,6 +102,7 @@ impl Item {
             detail: String::new(),
             subtitle: None,
             probed: false,
+            search_as: None,
         }
     }
 }
@@ -256,6 +261,21 @@ impl Controller {
                 c.update_watch();
             }
         });
+        ui.on_search_as({
+            let c = c.clone();
+            move |i, text| {
+                let Ok(index) = usize::try_from(i) else { return };
+                let text = text.trim().to_owned();
+                if let Some(it) = c.shared.items.lock().unwrap().get_mut(index) {
+                    it.search_as = (!text.is_empty()).then_some(text);
+                }
+                c.file_selected(index, true);
+            }
+        });
+        ui.on_restore({
+            let c = c.clone();
+            move |i| c.restore(i)
+        });
         ui.on_play({
             let c = c.clone();
             move |i| c.with_video(i, |p| opener::open(p).map_err(|e| e.to_string()))
@@ -274,6 +294,20 @@ impl Controller {
             }
         }
         c
+    }
+
+    /// Puts back the subtitle that the last download replaced (and the other way round).
+    fn restore(&self, index: i32) {
+        let Ok(index) = usize::try_from(index) else { return };
+        let Some(target) = self.target_subtitle(index) else {
+            self.status(ST_NO_BACKUP, 0, 0, "");
+            return;
+        };
+        match output::restore_backup(&target) {
+            Ok(true) => self.status(ST_RESTORED, 0, 0, file_name(&target)),
+            Ok(false) => self.status(ST_NO_BACKUP, 0, 0, ""),
+            Err(e) => self.status(ST_ERROR, 0, 0, e.to_string()),
+        }
     }
 
     /// Adds or removes "Find subtitles" in the file manager.
@@ -404,10 +438,11 @@ impl Controller {
             if c.generation() != epoch {
                 return;
             }
+            let first = c.languages().swap_remove(0);
             let rows: Vec<FileRow> = {
                 let mut items = c.shared.items.lock().unwrap();
                 *items = found.into_iter().map(Item::new).collect();
-                items.iter().map(|it| file_row(&folder, it)).collect()
+                items.iter().map(|it| file_row(&folder, it, &first)).collect()
             };
             let count = rows.len() as i32;
             let select = c.shared.select_after_scan.lock().unwrap().take();
@@ -658,6 +693,7 @@ impl Controller {
     /// Adds `path` to the list (or finds it there) and returns its index.
     fn add_video(&self, epoch: u64, path: &Path) -> Option<usize> {
         let root = self.shared.root.lock().unwrap().clone().unwrap_or_default();
+        let first = self.languages().swap_remove(0);
         let (index, row) = {
             let mut items = self.shared.items.lock().unwrap();
             if self.generation() != epoch {
@@ -674,7 +710,7 @@ impl Controller {
             };
             items.push(Item::new(media));
             let index = items.len() - 1;
-            (index, file_row(&root, &items[index]))
+            (index, file_row(&root, &items[index], &first))
         };
         let shared = self.shared.clone();
         let _ = self.ui.upgrade_in_event_loop(move |ui| {
@@ -710,9 +746,12 @@ impl Controller {
             return Ok(0);
         };
         self.set_state(epoch, index, SEARCHING, "");
-        let query = tokio::task::spawn_blocking(move || Engine::query_for(&media, &languages))
+        let mut query = tokio::task::spawn_blocking(move || Engine::query_for(&media, &languages))
             .await
             .map_err(|e| Error::Parse(e.to_string()))?;
+        if let Some(text) = self.shared.items.lock().unwrap().get(index).and_then(|it| it.search_as.clone()) {
+            query.name = name::parse(&text);
+        }
         let outcome = self.engine().search(&query, fresh).await;
         let count = outcome.candidates.len();
         let fatal = if count == 0 { outcome.errors.into_iter().find(is_fatal) } else { None };
@@ -935,13 +974,14 @@ impl Controller {
     /// Sends the current state of file `index` to its row in the window.
     fn push_row(&self, epoch: u64, index: usize) {
         let root = self.shared.root.lock().unwrap().clone().unwrap_or_default();
+        let first = self.languages().swap_remove(0);
         let row = {
             let items = self.shared.items.lock().unwrap();
             if self.generation() != epoch {
                 return;
             }
             let Some(it) = items.get(index) else { return };
-            file_row(&root, it)
+            file_row(&root, it, &first)
         };
         let shared = self.shared.clone();
         let _ = self.ui.upgrade_in_event_loop(move |ui| {
@@ -1044,7 +1084,7 @@ fn file_name(path: &Path) -> String {
     path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
 }
 
-fn file_row(root: &Path, it: &Item) -> FileRow {
+fn file_row(root: &Path, it: &Item, first_language: &str) -> FileRow {
     let folder =
         it.media.path.parent().map(|p| p.strip_prefix(root).unwrap_or(p).display().to_string()).unwrap_or_default();
     let mut langs: Vec<&str> = it.media.existing.iter().map(|s| s.language.unwrap_or("?")).collect();
@@ -1054,6 +1094,7 @@ fn file_row(root: &Path, it: &Item) -> FileRow {
         folder: folder.into(),
         existing: langs.join(", ").into(),
         embedded: it.media.embedded.join(", ").into(),
+        has_wanted: it.media.has_language(first_language),
         state: it.state,
         detail: it.detail.clone().into(),
     }

@@ -7,6 +7,8 @@ export struct FileRow {
     existing: string,
     // Languages of subtitle tracks inside the video ("tr").
     embedded: string,
+    // It has a subtitle (file or track) in the most wanted language.
+    has-wanted: bool,
     // See Texts.file-state.
     state: int,
     detail: string,
@@ -61,7 +63,8 @@ export global Texts {
     // 11 search finished (a = videos with candidates, b = videos searched), 12 reading audio (a = %),
     // 13 synced (a/b = speech match before/after %, detail = shift), 14 no ffmpeg,
     // 15 timing already fits (a = speech match %), 16 shifted (a = ms, detail = file), 17 nothing to sync,
-    // 18 search cache cleared, 19 file-manager entry added, 20 removed, 21 watch: new video (detail)
+    // 18 search cache cleared, 19 file-manager entry added, 20 removed, 21 watch: new video (detail),
+    // 22 previous subtitle restored (detail = file), 23 no previous subtitle
     public pure function status(kind: int, a: int, b: int, detail: string) -> string {
         if kind == 1 { return @tr("Scanning folder…"); }
         if kind == 2 { return @tr("Found {} videos.", a); }
@@ -85,6 +88,8 @@ export global Texts {
         if kind == 19 { return @tr("\"Find subtitles with SubMagician\" is now in the file manager's menu."); }
         if kind == 20 { return @tr("Removed from the file manager's menu."); }
         if kind == 21 { return @tr("New video in the folder: {}", detail); }
+        if kind == 22 { return @tr("Put back the previous {}.", detail); }
+        if kind == 23 { return @tr("There is no previous subtitle to put back."); }
         return @tr("Ready.");
     }
 }
@@ -96,6 +101,7 @@ component FileItem inherits Rectangle {
     callback clicked();
 
     height: 46px;
+    clip: true;
     background: selected ? Palette.selection-background : (even ? transparent : Palette.alternate-background);
 
     TouchArea {
@@ -299,6 +305,9 @@ export component AppWindow inherits Window {
     callback clear-cache();
     callback set-menu(bool);
     callback toggle-watch(bool);
+    callback search-as(int, string);
+    callback restore(int);
+    in-out property <bool> only-missing;
     in-out property <bool> watch;
     in property <bool> menu-installed;
     callback play(int);
@@ -386,6 +395,7 @@ export component AppWindow inherits Window {
                                 ListView {
                                     for row[i] in root.files: FileItem {
                                         item: row;
+                                        height: root.only-missing && row.has-wanted ? 0px : 46px;
                                         even: mod(i, 2) == 0;
                                         selected: i == root.selected-file;
                                         clicked => {
@@ -398,7 +408,6 @@ export component AppWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 8px;
-                                alignment: start;
                                 Button {
                                     text: @tr("Play");
                                     enabled: root.selected-file >= 0;
@@ -409,12 +418,30 @@ export component AppWindow inherits Window {
                                     enabled: root.selected-file >= 0;
                                     clicked => { root.reveal(root.selected-file); }
                                 }
+                                Rectangle { horizontal-stretch: 1; }
+                                CheckBox {
+                                    text: @tr("Only missing");
+                                    checked <=> root.only-missing;
+                                }
                             }
                         }
 
                         VerticalLayout {
                             horizontal-stretch: 5;
                             spacing: 8px;
+                            HorizontalLayout {
+                                spacing: 8px;
+                                search-as-edit := LineEdit {
+                                    enabled: !root.busy && root.selected-file >= 0;
+                                    placeholder-text: @tr("Search as… (e.g. The Office US S03E07)");
+                                    accepted(text) => { root.search-as(root.selected-file, text); }
+                                }
+                                Button {
+                                    text: @tr("Search");
+                                    enabled: !root.busy && root.selected-file >= 0;
+                                    clicked => { root.search-as(root.selected-file, search-as-edit.text); }
+                                }
+                            }
                             Rectangle {
                                 vertical-stretch: 1;
                                 border-width: 1px;
@@ -476,6 +503,11 @@ export component AppWindow inherits Window {
                             text: @tr("Sync to subtitle…");
                             enabled: parent.can-time;
                             clicked => { root.sync-reference(root.selected-file); }
+                        }
+                        Button {
+                            text: @tr("Restore previous");
+                            enabled: parent.can-time;
+                            clicked => { root.restore(root.selected-file); }
                         }
                         Rectangle { horizontal-stretch: 1; }
                         for step in [-1000, -100, 100, 1000]: Button {
