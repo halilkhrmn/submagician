@@ -46,6 +46,18 @@ impl MediaFile {
     }
 }
 
+/// One video file, with the subtitles next to it; `None` when `path` is not a video file.
+pub fn media_file(path: &Path) -> Option<MediaFile> {
+    let is_video = path.extension().is_some_and(|e| is_video_ext(&e.to_string_lossy()));
+    let meta = path.metadata().ok().filter(|m| m.is_file() && is_video)?;
+    Some(MediaFile {
+        path: path.to_path_buf(),
+        size: meta.len(),
+        existing: existing_subtitles(path),
+        embedded: Vec::new(),
+    })
+}
+
 /// Lists the videos under `dir` (sorted by path), skipping samples and trailers.
 pub fn scan(dir: &Path, recursive: bool) -> Vec<MediaFile> {
     let walker = WalkDir::new(dir).max_depth(if recursive { usize::MAX } else { 1 }).follow_links(true);

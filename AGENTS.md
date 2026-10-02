@@ -76,6 +76,7 @@ crates/core/   submagician-core, no GUI (shared by app and CLI)
   probe        subtitle track languages inside a video (ffprobe)
   watch        folder watch: videos that appeared and stopped growing
   integration  "Find subtitles" in the file manager (HKCU registry / Linux launchers, scripts)
+  tools        Windows: ffmpeg/ffprobe download on request (gyan.dev, SHA-256 checked)
 crates/app/    submagician (binary)
   ui/app.slint window: Subtitles / Settings / About tabs, Texts global (state codes → @tr text)
   src/main.rs  startup, tokio runtime, command-line path, drag & drop
