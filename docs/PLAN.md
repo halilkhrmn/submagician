@@ -25,7 +25,6 @@ APIs where a site has one, scraping only where it has none. Every source sits be
 |---|---|---|
 | OpenSubtitles.com | REST API, application key built in (like VLSub) | nothing; optional login raises the daily limit |
 | SubDL | API, application key built in | nothing |
-| Podnapisi | XML search interface (as subliminal) | nothing |
 | Addic7ed (TV) | via Gestdown's public API | nothing |
 | Turkish sites (Türkçealtyazı, PlanetDP) | need a browser engine (see Phase 3 notes) | — |
 
@@ -62,7 +61,8 @@ APIs where a site has one, scraping only where it has none. Every source sits be
 - Pick the audio track by language when a video has several.
 
 ### Phase 3 — More sources
-- SubDL, Podnapisi, Addic7ed (Gestdown) providers.
+- SubDL and Addic7ed (Gestdown) providers. (Podnapisi was added and removed: podnapisi.net no
+  longer resolves.)
 - RAR and 7z archives (through bsdtar / 7-Zip / unrar).
 - Search cache on disk so re-opening a folder does not re-query; provider on/off in settings.
 - Turkish sites: **not doable with plain HTTP**. Türkçealtyazı answers every request with a

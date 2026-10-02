@@ -10,7 +10,6 @@ use crate::name::ParsedName;
 
 pub mod gestdown;
 pub mod opensubtitles;
-pub mod podnapisi;
 pub mod subdl;
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;

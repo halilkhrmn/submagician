@@ -60,7 +60,7 @@ crates/core/   submagician-core, no GUI
   name         hunch-based name parsing (title, year, S/E, source, group), folder fallback, tokens
   lang         language table (OpenSubtitles codes, ISO 639-2, encoding-detection TLD hint)
   provider/    Provider trait, SearchQuery, Candidate; opensubtitles (REST), subdl (JSON),
-               podnapisi (XML), gestdown (Addic7ed TV through api.gestdown.info)
+               gestdown (Addic7ed TV through api.gestdown.info)
   cache        search results on disk (JSON per provider+query, 3 days / 12 h)
   score        candidate scoring and ranking, best pick per language order
   text         bytes → UTF-8 (BOM, UTF-16, chardetng, cp1254 for Turkish), format detection

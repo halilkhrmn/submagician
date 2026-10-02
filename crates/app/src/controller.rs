@@ -14,7 +14,6 @@ use submagician_core::engine::{Engine, Saved};
 use submagician_core::media::{self, MediaFile};
 use submagician_core::provider::gestdown::Gestdown;
 use submagician_core::provider::opensubtitles::{self, Credentials, OpenSubtitles};
-use submagician_core::provider::podnapisi::Podnapisi;
 use submagician_core::provider::subdl::{self, SubDl};
 use submagician_core::provider::{Candidate, Provider, SearchQuery};
 use submagician_core::sync::{self, Report, Span};
@@ -128,9 +127,6 @@ fn build_engine(s: &Settings) -> Arc<Engine> {
         && let Some(subdl) = SubDl::new(Some(s.subdl_api_key.clone()))
     {
         providers.push(Arc::new(subdl));
-    }
-    if s.use_podnapisi {
-        providers.push(Arc::new(Podnapisi::new()));
     }
     if s.use_addic7ed {
         providers.push(Arc::new(Gestdown::new()));
@@ -758,7 +754,6 @@ fn apply_settings(ui: &AppWindow, s: &Settings) {
     ui.set_ffmpeg_path(s.ffmpeg_path.clone().into());
     ui.set_use_opensubtitles(s.use_opensubtitles);
     ui.set_use_subdl(s.use_subdl);
-    ui.set_use_podnapisi(s.use_podnapisi);
     ui.set_use_addic7ed(s.use_addic7ed);
     ui.set_subdl_api_key(s.subdl_api_key.clone().into());
 }
@@ -780,7 +775,6 @@ fn read_settings(ui: &AppWindow, s: &mut Settings) {
     s.ffmpeg_path = ui.get_ffmpeg_path().trim().into();
     s.use_opensubtitles = ui.get_use_opensubtitles();
     s.use_subdl = ui.get_use_subdl();
-    s.use_podnapisi = ui.get_use_podnapisi();
     s.use_addic7ed = ui.get_use_addic7ed();
     s.subdl_api_key = ui.get_subdl_api_key().trim().into();
 }

@@ -172,8 +172,8 @@ msgstr "SubDL API anahtarı (isteğe bağlı, yerleşik anahtar kullanılıyor)"
 msgid "Subtitles"
 msgstr "Altyazılar"
 
-msgid "Subtitles from OpenSubtitles.com, SubDL, Podnapisi and Addic7ed (through Gestdown)."
-msgstr "Altyazılar OpenSubtitles.com, SubDL, Podnapisi ve Addic7ed'den (Gestdown üzerinden) gelir."
+msgid "Subtitles from OpenSubtitles.com, SubDL and Addic7ed (through Gestdown)."
+msgstr "Altyazılar OpenSubtitles.com, SubDL ve Addic7ed'den (Gestdown üzerinden) gelir."
 
 msgid "Sync every downloaded subtitle to the video's audio"
 msgstr "İndirilen her altyazıyı videonun sesine göre senkronla"
