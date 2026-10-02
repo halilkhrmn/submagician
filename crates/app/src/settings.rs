@@ -25,7 +25,6 @@ pub struct Settings {
     pub ffmpeg_path: String,
     pub use_opensubtitles: bool,
     pub use_subdl: bool,
-    pub use_podnapisi: bool,
     pub use_addic7ed: bool,
     /// Overrides the built-in SubDL key.
     pub subdl_api_key: String,
@@ -46,7 +45,6 @@ impl Default for Settings {
             ffmpeg_path: String::new(),
             use_opensubtitles: true,
             use_subdl: true,
-            use_podnapisi: true,
             use_addic7ed: true,
             subdl_api_key: String::new(),
         }

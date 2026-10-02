@@ -64,7 +64,7 @@ Numbered, newest last. Each: what, and why.
     a "(US)"/"(2005)" tag found in the file name, then by having the season.
 22. **SubDL is only added when it has a key** (built in or from Settings), so a missing key
     never stops a batch run.
-23. **Podnapisi via its XML interface** (`/subtitles/search/old?sXML=1`), the one subliminal
-    uses. Not verified live: podnapisi.net was unreachable from the development environment.
+23. **No Podnapisi.** It was added through its XML interface, then removed: `www.podnapisi.net`
+    no longer resolves in DNS (CI live test, 2026-10-02).
 24. **No plain-HTTP scrapers for Türkçealtyazı and PlanetDP** (see Phase 3 in PLAN): both need
     JavaScript, so a parser alone would never get past the first request.

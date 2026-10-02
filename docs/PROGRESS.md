@@ -6,9 +6,8 @@
   - [ ] Live test against OpenSubtitles with a real application key
 - [x] Phase 2 — Timing: ffmpeg, VAD + alass sync, frame rate, reference sync, manual offset
   - [ ] Check on real films (long soundtracks, music-heavy scenes) and tune VAD / thresholds
-- [x] Phase 3 — More sources: SubDL, Podnapisi, Addic7ed, RAR/7z, cache, source switches
-  - [ ] SubDL live test (needs the application key, `SUBDL_API_KEY` secret)
-  - [ ] Podnapisi live test (site unreachable from the dev environment)
+- [x] Phase 3 — More sources: SubDL, Addic7ed, RAR/7z, cache, source switches
+  - [x] Live tests in CI with the secrets: OpenSubtitles, SubDL, Addic7ed search + download
   - [ ] Turkish sites: decide on a hidden WebView (Türkçealtyazı and PlanetDP need JavaScript)
 - [ ] Phase 4 — Convenience: embedded tracks, watch folder, drag & drop, context menu, CLI
 - [ ] Phase 5 — Speech: Whisper generate / verify
@@ -16,6 +15,12 @@
 - [ ] Phase 7 — macOS
 
 ## Work log
+
+### 2026-10-02 — Live provider check, Podnapisi removed
+- Done: CI job `live` ran with the repository secrets: OpenSubtitles (42 results for Inception,
+  download OK, 99 left today), SubDL (30 results, download OK), Addic7ed OK. Podnapisi failed:
+  `www.podnapisi.net` does not resolve, so the provider is removed.
+- Verified: CI log of the `live` job on main (ddf6343).
 
 ### 2026-10-02 — Phase 3 sources
 - Done: providers `gestdown` (Addic7ed TV), `subdl`, `podnapisi`; search cache (JSON files,
