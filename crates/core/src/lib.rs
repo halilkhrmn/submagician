@@ -9,6 +9,7 @@ pub mod cache;
 pub mod engine;
 pub mod error;
 pub mod hash;
+pub mod integration;
 pub mod lang;
 pub mod media;
 pub mod name;

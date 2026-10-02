@@ -17,7 +17,7 @@ use submagician_core::provider::subdl;
 use submagician_core::provider::{Candidate, SearchQuery};
 use submagician_core::settings::Settings;
 use submagician_core::sync::{self, Report, Span};
-use submagician_core::{Error, audio, probe, score};
+use submagician_core::{Error, audio, integration, probe, score};
 use tokio::runtime::Handle;
 
 use crate::{AppWindow, CandidateRow, FileRow};
@@ -55,6 +55,8 @@ const ST_TIMING_OK: i32 = 15;
 const ST_SHIFTED: i32 = 16;
 const ST_NO_SUBTITLE: i32 = 17;
 const ST_CACHE_CLEARED: i32 = 18;
+const ST_MENU_ADDED: i32 = 19;
+const ST_MENU_REMOVED: i32 = 20;
 
 /// Pause between videos in batch runs, to stay well inside provider rate limits.
 const BATCH_PAUSE: Duration = Duration::from_millis(250);
@@ -216,6 +218,11 @@ impl Controller {
             move || c.save_settings()
         });
 
+        ui.set_menu_installed(integration::is_installed());
+        ui.on_set_menu({
+            let c = c.clone();
+            move |add| c.set_menu(add)
+        });
         ui.on_play({
             let c = c.clone();
             move |i| c.with_video(i, |p| opener::open(p).map_err(|e| e.to_string()))
@@ -234,6 +241,25 @@ impl Controller {
             }
         }
         c
+    }
+
+    /// Adds or removes "Find subtitles" in the file manager.
+    fn set_menu(&self, add: bool) {
+        let result = if add {
+            match integration::current_program() {
+                Some(program) => integration::install(&program),
+                None => Err(Error::Io(std::io::Error::other("cannot find SubMagician's own path"))),
+            }
+        } else {
+            integration::uninstall()
+        };
+        match result {
+            Ok(()) => self.status(if add { ST_MENU_ADDED } else { ST_MENU_REMOVED }, 0, 0, ""),
+            Err(e) => self.status(ST_ERROR, 0, 0, e.to_string()),
+        }
+        if let Some(ui) = self.ui.upgrade() {
+            ui.set_menu_installed(integration::is_installed());
+        }
     }
 
     /// Opens a folder, or a video's folder with that video selected (command line, drop).

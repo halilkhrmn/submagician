@@ -61,7 +61,7 @@ export global Texts {
     // 11 search finished (a = videos with candidates, b = videos searched), 12 reading audio (a = %),
     // 13 synced (a/b = speech match before/after %, detail = shift), 14 no ffmpeg,
     // 15 timing already fits (a = speech match %), 16 shifted (a = ms, detail = file), 17 nothing to sync,
-    // 18 search cache cleared
+    // 18 search cache cleared, 19 file-manager entry added, 20 removed
     public pure function status(kind: int, a: int, b: int, detail: string) -> string {
         if kind == 1 { return @tr("Scanning folder…"); }
         if kind == 2 { return @tr("Found {} videos.", a); }
@@ -82,6 +82,8 @@ export global Texts {
         if kind == 16 { return @tr("Moved {} by {} ms.", detail, a); }
         if kind == 17 { return @tr("This video has no subtitle to sync yet."); }
         if kind == 18 { return @tr("Search cache cleared."); }
+        if kind == 19 { return @tr("\"Find subtitles with SubMagician\" is now in the file manager's menu."); }
+        if kind == 20 { return @tr("Removed from the file manager's menu."); }
         return @tr("Ready.");
     }
 }
@@ -294,6 +296,8 @@ export component AppWindow inherits Window {
     callback sync-reference(int);
     callback shift(int, int);
     callback clear-cache();
+    callback set-menu(bool);
+    in property <bool> menu-installed;
     callback play(int);
     callback reveal(int);
     callback save-settings();
@@ -543,6 +547,24 @@ export component AppWindow inherits Window {
                                     Button {
                                         text: @tr("Clear search cache");
                                         clicked => { root.clear-cache(); }
+                                    }
+                                }
+                            }
+                        }
+                        GroupBox {
+                            title: @tr("File manager");
+                            VerticalLayout {
+                                spacing: 8px;
+                                Text {
+                                    text: @tr("Right-click a folder or a video and choose \"Find subtitles with SubMagician\". On Linux it also adds SubMagician to \"Open with\", so folders can be dropped on its icon.");
+                                    wrap: word-wrap;
+                                }
+                                HorizontalLayout {
+                                    alignment: start;
+                                    spacing: 8px;
+                                    Button {
+                                        text: root.menu-installed ? @tr("Remove from the menu") : @tr("Add to the menu");
+                                        clicked => { root.set-menu(!root.menu-installed); }
                                     }
                                 }
                             }
