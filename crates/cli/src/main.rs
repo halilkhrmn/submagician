@@ -10,13 +10,13 @@ use clap::Parser;
 use submagician_core::engine::Engine;
 use submagician_core::media::{self, MediaFile};
 use submagician_core::settings::Settings;
-use submagician_core::{Error, audio, lang, probe, score, sync};
+use submagician_core::{Error, audio, lang, output, probe, score, speech, sync};
 
 #[derive(Parser, Debug)]
 #[command(name = "submagician-cli", version, about = "Find, pick, fix and sync subtitles for videos")]
 struct Args {
     /// Video files or folders.
-    #[arg(required = true)]
+    #[arg(required_unless_present = "download_model")]
     paths: Vec<PathBuf>,
     /// Wanted languages, most wanted first, e.g. "tr,en" (default: the app's setting).
     #[arg(short, long)]
@@ -39,12 +39,31 @@ struct Args {
     /// Ask the sources again instead of using cached search results.
     #[arg(long)]
     fresh: bool,
+    /// When no source has a subtitle, write one from the audio with Whisper.
+    #[arg(long)]
+    generate: bool,
+    /// Whisper model for --generate: tiny, base, small, medium, large-v3-turbo (default: the app's).
+    #[arg(long)]
+    model: Option<String>,
+    /// Download a Whisper model and exit.
+    #[arg(long, value_name = "MODEL")]
+    download_model: Option<String>,
 }
 
 fn main() -> ExitCode {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("error")).init();
     let args = Args::parse();
+    if let Some(id) = &args.download_model {
+        return download_model(id);
+    }
     let mut settings = Settings::load();
+    if let Some(id) = &args.model {
+        if speech::model(id).is_none() {
+            eprintln!("unknown model {id:?}; models: {}", model_ids());
+            return ExitCode::from(2);
+        }
+        settings.whisper_model = id.clone();
+    }
     if let Some(list) = &args.lang {
         settings.languages = list.clone();
     }
@@ -65,6 +84,36 @@ fn main() -> ExitCode {
     }
     let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().expect("tokio runtime");
     runtime.block_on(run(&args, &settings, videos))
+}
+
+fn download_model(id: &str) -> ExitCode {
+    let (Some(model), Some(dir)) = (speech::model(id), speech::models_dir()) else {
+        eprintln!("unknown model {id:?}; models: {}", model_ids());
+        return ExitCode::from(2);
+    };
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().expect("tokio runtime");
+    let mut last = u64::MAX;
+    let mut progress = |done: u64, total: Option<u64>| {
+        let pct = total.filter(|t| *t > 0).map_or(0, |t| done * 100 / t);
+        if pct != last && pct.is_multiple_of(10) {
+            last = pct;
+            eprintln!("{} {pct}%", model.id);
+        }
+    };
+    match runtime.block_on(model.download(&dir, &AtomicBool::new(false), &mut progress)) {
+        Ok(path) => {
+            println!("{}", path.display());
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("download failed: {e}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+fn model_ids() -> String {
+    speech::MODELS.iter().map(|m| m.id).collect::<Vec<_>>().join(", ")
 }
 
 /// Switches on exactly the named sources.
@@ -119,6 +168,20 @@ async fn run(args: &Args, settings: &Settings, videos: Vec<MediaFile>) -> ExitCo
     if sync_wanted && ffmpeg.is_none() {
         eprintln!("note: ffmpeg not found, subtitles will not be synced to the audio");
     }
+    let whisper = if args.generate {
+        match speech::model(&settings.whisper_model).and_then(|m| m.installed()) {
+            Some(path) => Some(path),
+            None => {
+                eprintln!(
+                    "note: Whisper model {:?} is not downloaded (submagician-cli --download-model {}); --generate is off",
+                    settings.whisper_model, settings.whisper_model
+                );
+                None
+            }
+        }
+    } else {
+        None
+    };
     let mut tally = Tally::default();
     let mut reported = HashSet::new();
     for mut video in videos {
@@ -139,8 +202,24 @@ async fn run(args: &Args, settings: &Settings, videos: Vec<MediaFile>) -> ExitCo
             }
         }
         let Some(best) = score::best(&outcome.candidates, &languages) else {
-            println!("[none]  {name}: nothing found");
-            tally.missing += 1;
+            match (&whisper, &ffmpeg) {
+                (Some(model), Some(ffmpeg)) if !args.dry_run => {
+                    match generate(model, ffmpeg, &video.path, &languages[0]) {
+                        Ok(path) => {
+                            println!("[audio] {name} -> {} (written from the audio)", file_name(&path));
+                            tally.saved += 1;
+                        }
+                        Err(e) => {
+                            println!("[fail]  {name}: nothing found, and from the audio: {e}");
+                            tally.failed += 1;
+                        }
+                    }
+                }
+                _ => {
+                    println!("[none]  {name}: nothing found");
+                    tally.missing += 1;
+                }
+            }
             continue;
         };
         let c = &outcome.candidates[best];
@@ -170,6 +249,14 @@ async fn run(args: &Args, settings: &Settings, videos: Vec<MediaFile>) -> ExitCo
     }
     println!("{} saved, {} skipped, {} not found, {} failed", tally.saved, tally.skipped, tally.missing, tally.failed);
     if tally.failed == 0 { ExitCode::SUCCESS } else { ExitCode::from(1) }
+}
+
+/// Writes a subtitle from the audio and saves it next to the video.
+fn generate(model: &Path, ffmpeg: &Path, video: &Path, target: &str) -> Result<PathBuf, Error> {
+    let progress: std::sync::Arc<dyn Fn(f32) + Send + Sync> = std::sync::Arc::new(|_| {});
+    let cancel = std::sync::Arc::new(AtomicBool::new(false));
+    let t = speech::transcribe(model, ffmpeg, video, Some(target), cancel, progress)?;
+    output::write_subtitle(video, &t.language, "srt", &t.to_srt())
 }
 
 fn sync_note(ffmpeg: &Path, video: &Path, subtitle: &Path) -> String {
@@ -204,6 +291,10 @@ mod tests {
         assert!(a.no_sync && a.dry_run && !a.force);
         assert_eq!(a.paths, vec![PathBuf::from("/films")]);
         assert!(Args::try_parse_from(["submagician-cli"]).is_err(), "a path is required");
+        let d = Args::try_parse_from(["submagician-cli", "--download-model", "base"]).unwrap();
+        assert_eq!(d.download_model.as_deref(), Some("base"));
+        let g = Args::try_parse_from(["submagician-cli", "--generate", "--model", "tiny", "x"]).unwrap();
+        assert!(g.generate && g.model.as_deref() == Some("tiny"));
     }
 
     #[test]

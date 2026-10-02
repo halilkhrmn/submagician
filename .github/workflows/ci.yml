@@ -25,6 +25,18 @@ jobs:
       - name: Linux build dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev libxkbcommon-x11-0 ffmpeg libarchive-tools
+      - name: Whisper test model (cached)
+        if: runner.os == 'Linux'
+        uses: actions/cache@v4
+        with:
+          path: .whisper
+          key: whisper-ggml-tiny-v1
+      - name: Download the Whisper test model
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p .whisper
+          test -f .whisper/ggml-tiny.bin || curl -sSfL -o .whisper/ggml-tiny.bin \
+            https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin
       - name: Format
         if: runner.os == 'Linux'
         run: cargo fmt --all --check
@@ -37,6 +49,8 @@ jobs:
           SUBMAGICIAN_REQUIRE_FFMPEG: ${{ runner.os == 'Linux' && '1' || '' }}
           # Linux has bsdtar: the RAR/7z archive test must run there too.
           SUBMAGICIAN_REQUIRE_BSDTAR: ${{ runner.os == 'Linux' && '1' || '' }}
+          # Linux runs the Whisper test with the tiny model downloaded above.
+          SUBMAGICIAN_WHISPER_MODEL: ${{ runner.os == 'Linux' && format('{0}/.whisper/ggml-tiny.bin', github.workspace) || '' }}
       - name: Release build
         env:
           SUBMAGICIAN_OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}

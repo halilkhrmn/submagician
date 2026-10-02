@@ -38,12 +38,13 @@ Work-log entries: newest on top, `### YYYY-MM-DD — short title`, then bullets 
 
 ## Commands
 
-Needs Rust 1.88+ (stable) and a C compiler (webrtc-vad). Linux build needs `libfontconfig1-dev`
+Needs Rust 1.88+ (stable), a C/C++ compiler and CMake (webrtc-vad, whisper.cpp). Linux build needs `libfontconfig1-dev`
 and `libxkbcommon-dev` (runtime: `libxkbcommon-x11-0` on X11). Syncing to audio needs `ffmpeg`.
 
 | What | Command |
 |---|---|
 | All tests | `cargo test --all` (audio tests need ffmpeg with flite, the 7z test bsdtar; `SUBMAGICIAN_REQUIRE_FFMPEG=1` / `SUBMAGICIAN_REQUIRE_BSDTAR=1` make a skip fail) |
+| Whisper test | `SUBMAGICIAN_WHISPER_MODEL=/path/ggml-tiny.bin cargo test -p submagician-core --features whisper --test speech_audio` |
 | Live provider tests | `SUBMAGICIAN_LIVE=1 cargo test -p submagician-core live_ -- --nocapture` (needs the provider keys at build time; CI job `live` runs them with the secrets) |
 | Lint | `cargo clippy --all-targets -- -D warnings` and `cargo fmt --all --check` |
 | Run | `cargo run -p submagician` |
@@ -77,6 +78,7 @@ crates/core/   submagician-core, no GUI (shared by app and CLI)
   watch        folder watch: videos that appeared and stopped growing
   integration  "Find subtitles" in the file manager (HKCU registry / Linux launchers, scripts)
   tools        Windows: ffmpeg/ffprobe download on request (gyan.dev, SHA-256 checked)
+  speech       (feature `whisper`) Whisper models, download, transcription to SRT
 crates/app/    submagician (binary)
   ui/app.slint window: Subtitles / Settings / About tabs, Texts global (state codes → @tr text)
   src/main.rs  startup, tokio runtime, command-line path, drag & drop

@@ -39,6 +39,9 @@ Ayrıca:
 - **Watch folder**: klasöre eklenen yeni videolar, kopyalanması bitince altyazısını kendisi alır.
 - **Only missing** işi bitmiş videoları gizler; listenin altında **Play** ve **Show in folder**
   var.
+- **Write from audio** (Whisper, bu bilgisayarda): hiçbir kaynakta altyazı yoksa konuşmadan
+  altyazı yazar. Modeli Settings → Speech'ten seçip indir; istersen otomatik de çalışır.
+  İngilizceye her dilden çevirebilir; diğer dillerde konuşulan dilde yazar.
 
 Ayarlar: istenen diller sırayla (`tr, en`), kaynaklar, daha yüksek günlük indirme sınırı için
 isteğe bağlı OpenSubtitles girişi, ffmpeg yolu.
@@ -51,13 +54,14 @@ isteğe bağlı OpenSubtitles girişi, ffmpeg yolu.
 submagician-cli ~/Videolar                    # her video için en iyi altyazı + senkron
 submagician-cli -l tr,en --dry-run Film.mkv   # neyi seçeceğini göster
 submagician-cli --sources addic7ed --no-sync ~/Diziler/The.Office
+submagician-cli --download-model base && submagician-cli --generate ~/Videolar
 ```
 
 `submagician <klasör ya da video>` uygulamayı o klasörle açar.
 
 ## Derleme
 
-Rust 1.88+ ve bir C derleyicisi. Linux'ta: `libfontconfig1-dev libxkbcommon-dev`. Senkron ve
+Rust 1.88+, bir C/C++ derleyicisi ve CMake. Linux'ta: `libfontconfig1-dev libxkbcommon-dev`. Senkron ve
 gömülü izler için: PATH'te ya da programın yanında `ffmpeg` ve `ffprobe`.
 
 ```sh

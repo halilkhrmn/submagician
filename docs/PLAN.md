@@ -90,9 +90,14 @@ APIs where a site has one, scraping only where it has none. Every source sits be
 - UI is English only for now; a language system comes back later.
 
 ### Phase 5 — Speech (Whisper)
-- whisper.cpp through `whisper-rs`, model downloaded on demand by the user.
-- Generate a subtitle when no source has one; optional translation.
-- Use a short transcript to check which candidate matches the audio.
+- whisper.cpp through `whisper-rs` (core feature `whisper`), models downloaded on request
+  (tiny … large-v3-turbo) into the data folder.
+- Write a subtitle from the audio for one video ("Write from audio"), or automatically when no
+  source has one (setting; batch and watch), and from the CLI (`--generate`).
+- Into English any language is translated; other targets get the spoken language (Whisper
+  only translates into English).
+- Later: use a short transcript to check which candidate matches the audio; Whisper segments as
+  a sync reference for music-heavy films; GPU builds (CUDA/Vulkan/Metal).
 
 ### Phase 6 — Packaging (Windows, Linux)
 - Windows: installer (MSI or Inno Setup), ffmpeg bundled, icon/version resources.

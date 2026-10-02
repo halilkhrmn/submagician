@@ -40,6 +40,9 @@ More:
   they have finished copying.
 - **Only missing** hides the videos that are done; **Play** and **Show in folder** are under the
   list.
+- **Write from audio** (Whisper, on this computer): when no source has a subtitle, one is written
+  from the speech. Pick and download a model in Settings → Speech; it can also run automatically.
+  Into English it translates any language; other languages are written as spoken.
 
 Settings: wanted languages in order (`tr, en`), sources, optional OpenSubtitles login for a
 higher daily download limit, ffmpeg path.
@@ -52,13 +55,14 @@ higher daily download limit, ffmpeg path.
 submagician-cli ~/Videos                      # best subtitle + sync for every video
 submagician-cli -l tr,en --dry-run Film.mkv   # show what it would pick
 submagician-cli --sources addic7ed --no-sync ~/Shows/The.Office
+submagician-cli --download-model base && submagician-cli --generate ~/Videos
 ```
 
 `submagician <folder or video>` opens the app on that folder.
 
 ## Build
 
-Rust 1.88+ and a C compiler. On Linux: `libfontconfig1-dev libxkbcommon-dev`. For syncing and
+Rust 1.88+, a C/C++ compiler and CMake. On Linux: `libfontconfig1-dev libxkbcommon-dev`. For syncing and
 embedded tracks: `ffmpeg` and `ffprobe` on PATH or next to the program.
 
 ```sh

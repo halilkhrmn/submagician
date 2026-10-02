@@ -22,4 +22,9 @@ thiserror = "2.0.21"
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros"] }
 walkdir = "2.5.0"
 webrtc-vad = "0.4.0"
+whisper-rs = { version = "0.16.0", optional = true, features = ["log_backend"] }
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+
+[features]
+# Speech recognition (whisper.cpp, built with CMake).
+whisper = ["dep:whisper-rs"]

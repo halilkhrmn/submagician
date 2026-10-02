@@ -12,11 +12,23 @@
 - [x] Phase 4 — Convenience: embedded tracks, watch folder, drag & drop, context menu, CLI
   - [ ] Wayland drop tried on a real desktop (starts fine on weston; the drop itself untested)
   - [ ] Windows: Explorer menu entries and drag & drop tried on a real machine
-- [ ] Phase 5 — Speech: Whisper generate / verify
+- [x] Phase 5 — Speech: Whisper write-from-audio (app, batch/watch fallback, CLI)
+  - [ ] Try on real films with base/small models (speed and quality on a normal PC)
 - [ ] Phase 6 — Packaging for Windows and Linux
 - [ ] Phase 7 — macOS
 
 ## Work log
+
+### 2026-10-02 — Phase 5 Whisper
+- Done: `core::speech` (models, download, pieces cut at silence, VAD-snapped segments, sound tags
+  dropped, SRT); app: Settings → Speech (model, download, write when nothing is found), "Write
+  from audio"; CLI `--generate`, `--model`, `--download-model`; CI downloads ggml-tiny (cached)
+  and requires the Whisper test on Linux.
+- Verified: unit tests; real transcription of the 8-sentence synthetic film with ggml-tiny
+  (every line within 0.8 s of its sentence, key words right); in the app under Xvfb "Write from
+  audio" saved `Harbor….en.srt` starting at 1.65 s; CLI downloaded tiny from Hugging Face and
+  wrote a subtitle with `--generate`.
+- Found: whisper-rs 0.16's safe abort callback is unsound; the raw callback is used instead.
 
 ### 2026-10-02 — First Windows test: fixes
 - Feedback: opening one video listed the whole folder; "Saved, sync failed: ffmpeg" on every
