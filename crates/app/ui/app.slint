@@ -5,6 +5,8 @@ export struct FileRow {
     folder: string,
     // Languages of the subtitles already next to the video ("tr, en").
     existing: string,
+    // Languages of subtitle tracks inside the video ("tr").
+    embedded: string,
     // See Texts.file-state.
     state: int,
     detail: string,
@@ -139,7 +141,9 @@ component FileItem inherits Rectangle {
                 color: root.selected ? Palette.selection-foreground : Palette.foreground;
             }
             Text {
-                text: root.item.existing == "" ? "" : @tr("Has: {}", root.item.existing);
+                text: (root.item.existing == "" ? "" : @tr("Has: {}", root.item.existing))
+                    + (root.item.existing != "" && root.item.embedded != "" ? " · " : "")
+                    + (root.item.embedded == "" ? "" : @tr("In video: {}", root.item.embedded));
                 overflow: elide;
                 font-size: 11px;
                 opacity: 0.6;

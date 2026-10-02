@@ -21,8 +21,8 @@ const BRIDGE_MS: i64 = 200;
 /// Voiced bits shorter than this are noise.
 const MIN_SPEECH_MS: i64 = 100;
 
-fn exe_name() -> &'static str {
-    if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" }
+fn exe_name(tool: &str) -> String {
+    if cfg!(windows) { format!("{tool}.exe") } else { tool.to_owned() }
 }
 
 /// Finds ffmpeg: the configured path, next to SubMagician's executable, then on `PATH`.
@@ -30,15 +30,31 @@ pub fn find_ffmpeg(configured: Option<&Path>) -> Option<PathBuf> {
     if let Some(p) = configured.filter(|p| !p.as_os_str().is_empty()) {
         return p.is_file().then(|| p.to_path_buf());
     }
-    let beside = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join(exe_name())));
+    find_tool("ffmpeg")
+}
+
+/// Finds ffprobe: next to the configured ffmpeg, next to SubMagician, then on `PATH`.
+pub fn find_ffprobe(configured_ffmpeg: Option<&Path>) -> Option<PathBuf> {
+    if let Some(dir) = configured_ffmpeg.filter(|p| !p.as_os_str().is_empty()).and_then(Path::parent) {
+        let p = dir.join(exe_name("ffprobe"));
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    find_tool("ffprobe")
+}
+
+fn find_tool(tool: &str) -> Option<PathBuf> {
+    let name = exe_name(tool);
+    let beside = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join(&name)));
     if let Some(p) = beside.filter(|p| p.is_file()) {
         return Some(p);
     }
     let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path).map(|d| d.join(exe_name())).find(|p| p.is_file())
+    std::env::split_paths(&path).map(|d| d.join(&name)).find(|p| p.is_file())
 }
 
-fn command(ffmpeg: &Path) -> Command {
+pub(crate) fn command(ffmpeg: &Path) -> Command {
     #[allow(unused_mut)]
     let mut cmd = Command::new(ffmpeg);
     #[cfg(windows)]

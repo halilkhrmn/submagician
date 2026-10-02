@@ -13,6 +13,7 @@ pub mod lang;
 pub mod media;
 pub mod name;
 pub mod output;
+pub mod probe;
 pub mod provider;
 pub mod score;
 pub mod sync;

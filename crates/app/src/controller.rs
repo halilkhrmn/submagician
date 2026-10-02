@@ -17,7 +17,7 @@ use submagician_core::provider::opensubtitles::{self, Credentials, OpenSubtitles
 use submagician_core::provider::subdl::{self, SubDl};
 use submagician_core::provider::{Candidate, Provider, SearchQuery};
 use submagician_core::sync::{self, Report, Span};
-use submagician_core::{Error, audio, score};
+use submagician_core::{Error, audio, probe, score};
 use tokio::runtime::Handle;
 
 use crate::settings::Settings;
@@ -69,6 +69,8 @@ struct Item {
     detail: String,
     /// Subtitle saved by this session, the one to sync or shift.
     subtitle: Option<PathBuf>,
+    /// Subtitle tracks inside the video were read (or cannot be: no ffprobe).
+    probed: bool,
 }
 
 impl Item {
@@ -81,6 +83,7 @@ impl Item {
             state: WAITING,
             detail: String::new(),
             subtitle: None,
+            probed: false,
         }
     }
 }
@@ -325,7 +328,55 @@ impl Controller {
             let count = rows.len() as i32;
             let _ = c.ui.upgrade_in_event_loop(move |ui| ui.set_files(ModelRc::new(VecModel::from(rows))));
             c.status(ST_SCANNED, count, 0, "");
+            // Read the subtitle tracks inside the videos in the background; the window stays usable.
+            let bg = c.clone();
+            tokio::spawn(async move {
+                for i in 0..count as usize {
+                    if bg.generation() != epoch {
+                        return;
+                    }
+                    bg.probe_item(epoch, i).await;
+                }
+            });
         });
+    }
+
+    /// Reads the subtitle tracks inside video `index` once (needs ffprobe).
+    async fn probe_item(&self, epoch: u64, index: usize) {
+        let video = {
+            let mut items = self.shared.items.lock().unwrap();
+            match items.get_mut(index) {
+                Some(it) if !it.probed => {
+                    it.probed = true;
+                    it.media.path.clone()
+                }
+                _ => return,
+            }
+        };
+        let configured = PathBuf::from(&self.shared.settings.lock().unwrap().ffmpeg_path);
+        let Some(ffprobe) = audio::find_ffprobe(Some(&configured)) else { return };
+        let langs = tokio::task::spawn_blocking(move || probe::embedded_languages(&ffprobe, &video)).await;
+        let langs = match langs {
+            Ok(Ok(langs)) => langs,
+            Ok(Err(e)) => {
+                log::debug!("ffprobe: {e}");
+                return;
+            }
+            Err(_) => return,
+        };
+        if langs.is_empty() {
+            return;
+        }
+        {
+            let mut items = self.shared.items.lock().unwrap();
+            if self.generation() != epoch {
+                return;
+            }
+            if let Some(it) = items.get_mut(index) {
+                it.media.embedded = langs;
+            }
+        }
+        self.push_row(epoch, index);
     }
 
     /// Shows the candidates of file `index`, searching first if needed (or if `force`).
@@ -402,6 +453,7 @@ impl Controller {
             self.status(if download { ST_DOWNLOADING } else { ST_SEARCHING }, i as i32 + 1, total as i32, "");
             self.progress(i as f32 / total as f32);
 
+            self.probe_item(epoch, i).await;
             let (has_first, was_searched) = {
                 let items = self.shared.items.lock().unwrap();
                 let it = &items[i];
@@ -672,8 +724,7 @@ impl Controller {
     }
 
     fn set_state(&self, epoch: u64, index: usize, state: i32, detail: impl Into<String>) {
-        let root = self.shared.root.lock().unwrap().clone().unwrap_or_default();
-        let row = {
+        {
             let mut items = self.shared.items.lock().unwrap();
             if self.generation() != epoch {
                 return;
@@ -681,6 +732,19 @@ impl Controller {
             let Some(it) = items.get_mut(index) else { return };
             it.state = state;
             it.detail = detail.into();
+        }
+        self.push_row(epoch, index);
+    }
+
+    /// Sends the current state of file `index` to its row in the window.
+    fn push_row(&self, epoch: u64, index: usize) {
+        let root = self.shared.root.lock().unwrap().clone().unwrap_or_default();
+        let row = {
+            let items = self.shared.items.lock().unwrap();
+            if self.generation() != epoch {
+                return;
+            }
+            let Some(it) = items.get(index) else { return };
             file_row(&root, it)
         };
         let shared = self.shared.clone();
@@ -804,6 +868,7 @@ fn file_row(root: &Path, it: &Item) -> FileRow {
         name: it.media.file_name().into(),
         folder: folder.into(),
         existing: langs.join(", ").into(),
+        embedded: it.media.embedded.join(", ").into(),
         state: it.state,
         detail: it.detail.clone().into(),
     }
