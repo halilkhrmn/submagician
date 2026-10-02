@@ -24,7 +24,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Linux build dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev libxkbcommon-x11-0
+        run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev libxkbcommon-x11-0 ffmpeg
       - name: Format
         if: runner.os == 'Linux'
         run: cargo fmt --all --check
@@ -32,6 +32,9 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: Tests
         run: cargo test --all
+        env:
+          # Linux has ffmpeg with flite: the audio sync tests must run there, not be skipped.
+          SUBMAGICIAN_REQUIRE_FFMPEG: ${{ runner.os == 'Linux' && '1' || '' }}
       - name: Release build
         env:
           SUBMAGICIAN_OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}

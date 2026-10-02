@@ -49,8 +49,8 @@ msgstr "İndiriliyor…"
 msgid "Error: {}"
 msgstr "Hata: {}"
 
-msgid "Finds subtitles for your videos, picks the one made for your file and saves it as UTF-8 next to the video."
-msgstr "Videoların için altyazı bulur, senin dosyan için hazırlanmış olanı seçer ve videonun yanına UTF-8 olarak kaydeder."
+msgid "Finds subtitles for your videos, picks the one made for your file, fixes its encoding and timing, and saves it next to the video."
+msgstr "Videoların için altyazı bulur, senin dosyan için hazırlanmış olanı seçer, kodlamasını ve zamanlamasını düzeltir ve videonun yanına kaydeder."
 
 msgid "Found {} videos."
 msgstr "{} video bulundu."
@@ -73,6 +73,9 @@ msgstr "Diller, en çok istenen önce (örneğin: tr, en)"
 msgid "Languages: {}"
 msgstr "Diller: {}"
 
+msgid "Moved {} by {} ms."
+msgstr "{} dosyası {} ms kaydırıldı."
+
 msgid "No folder chosen"
 msgstr "Klasör seçilmedi"
 
@@ -88,6 +91,9 @@ msgstr "İsteğe bağlı. Giriş yapınca günlük indirme sınırı artar."
 msgid "Password"
 msgstr "Şifre"
 
+msgid "Reading the audio… {}%"
+msgstr "Ses okunuyor… %{}"
+
 msgid "Ready."
 msgstr "Hazır."
 
@@ -102,6 +108,12 @@ msgstr "{} kaydedildi (bugün {} indirme hakkı kaldı)."
 
 msgid "Saved {}."
 msgstr "{} kaydedildi."
+
+msgid "Saved, sync failed: {}"
+msgstr "Kaydedildi, senkron başarısız: {}"
+
+msgid "Saved, timing fits"
+msgstr "Kaydedildi, zamanlama uyuyor"
 
 msgid "Scanning folder…"
 msgstr "Klasör taranıyor…"
@@ -145,11 +157,53 @@ msgstr "Altyazılar"
 msgid "Subtitles from OpenSubtitles.com."
 msgstr "Altyazılar OpenSubtitles.com'dan gelir."
 
+msgid "Sync every downloaded subtitle to the video's audio"
+msgstr "İndirilen her altyazıyı videonun sesine göre senkronla"
+
+msgid "Sync to audio"
+msgstr "Sesle senkronla"
+
+msgid "Sync to subtitle…"
+msgstr "Altyazıya göre senkronla…"
+
+msgid "Synced {}"
+msgstr "Senkronlandı {}"
+
+msgid "Synced: {}. Speech match {}% → {}%."
+msgstr "Senkronlandı: {}. Konuşma uyumu %{} → %{}."
+
+msgid "Syncing…"
+msgstr "Senkronlanıyor…"
+
+msgid "This video has no subtitle to sync yet."
+msgstr "Bu videonun henüz senkronlanacak altyazısı yok."
+
+msgid "Timing"
+msgstr "Zamanlama"
+
+msgid "Timing already fits ({}% speech match); left unchanged."
+msgstr "Zamanlama zaten uyuyor (konuşma uyumu %{}); değiştirilmedi."
+
+msgid "Timing:"
+msgstr "Zamanlama:"
+
 msgid "User name"
 msgstr "Kullanıcı adı"
 
 msgid "Waiting"
 msgstr "Bekliyor"
+
+msgid "ffmpeg not found. Install it (or put ffmpeg next to SubMagician) or set its path below."
+msgstr "ffmpeg bulunamadı. Kur (ya da SubMagician'ın yanına koy) veya yolunu aşağıya yaz."
+
+msgid "ffmpeg not found. Install it or set its path in Settings to sync with the audio."
+msgstr "ffmpeg bulunamadı. Sesle senkron için kur ya da yolunu Ayarlar'da belirt."
+
+msgid "ffmpeg path (optional)"
+msgstr "ffmpeg yolu (isteğe bağlı)"
+
+msgid "ffmpeg: {}"
+msgstr "ffmpeg: {}"
 
 msgid "hash match"
 msgstr "hash eşleşmesi"

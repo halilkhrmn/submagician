@@ -33,3 +33,21 @@ Numbered, newest last. Each: what, and why.
 11. **License: AGPL-3.0** (the owner's choice when the repository was created). Slint is used
     under its GPLv3 option, which AGPL-3.0 §13 allows combining with; the `AboutSlint` notice on
     the About tab is kept anyway.
+12. **Own timing parser, not `subparse`.** Syncing only needs the cue times; a small line-based
+    parser for SRT, WebVTT and ASS/SSA rewrites just the time fields, so styles, tags, positions
+    and comments survive untouched. MicroDVD (`.sub`, frame based) is not synced.
+13. **Audio: ffmpeg → 8 kHz mono PCM → WebRTC VAD (aggressive mode) in 10 ms frames.** Aggressive
+    mode ignores more music and noise, which movie soundtracks have a lot of. Pauses under 200 ms
+    are joined and voiced bits under 100 ms dropped. ffmpeg runs as a separate process (found via
+    setting, next to the exe, or PATH; bundled in Phase 6), with no console window on Windows.
+14. **Frame rate by trial, not ffprobe.** Each common ratio (23.976 / 24 / 25 pairs) is tried with
+    alass' single-offset alignment and overlap scoring; the best (by more than 1 %) wins. This also
+    catches subtitles timed for a sped-up release when the video's own frame rate says nothing.
+15. **alass with split penalty 7 and speed optimization 1** (its documented defaults), so cut or
+    added scenes get their own offsets.
+16. **A sync is applied only if it raises the speech overlap by 2 points or more.** The overlap
+    is the share of subtitle time that falls on detected speech, shown to the user before → after.
+    It protects a subtitle that was already right from being moved by a noisy soundtrack.
+17. **Synced and shifted subtitles are rewritten in place** (UTF-8 BOM, CRLF, atomic). The
+    download step's `.bak` keeps the file that was there before, if any; manual ± steps undo a
+    shift. Speech spans are cached per video for the session.

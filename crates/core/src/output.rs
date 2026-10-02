@@ -23,13 +23,21 @@ pub fn write_subtitle(video: &Path, language: &str, ext: &str, text: &str) -> Re
             fs::rename(&path, &backup)?;
         }
     }
+    rewrite(&path, text)?;
+    Ok(path)
+}
+
+/// Replaces the subtitle at `path` with `text` (UTF-8 with BOM, CRLF), atomically, no backup.
+pub fn rewrite(path: &Path, text: &str) -> Result<()> {
     let mut data = Vec::with_capacity(text.len() + 3);
     data.extend_from_slice(b"\xEF\xBB\xBF");
-    data.extend_from_slice(text.replace('\n', "\r\n").as_bytes());
-    let tmp = path.with_extension(format!("{ext}.part"));
+    data.extend_from_slice(text.replace("\r\n", "\n").replace('\n', "\r\n").as_bytes());
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(".part");
+    let tmp = PathBuf::from(tmp);
     fs::write(&tmp, &data)?;
-    fs::rename(&tmp, &path)?;
-    Ok(path)
+    fs::rename(&tmp, path)?;
+    Ok(())
 }
 
 #[cfg(test)]

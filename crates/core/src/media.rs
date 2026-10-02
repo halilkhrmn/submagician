@@ -104,6 +104,12 @@ pub fn existing_subtitles(video: &Path) -> Vec<ExistingSubtitle> {
     subs
 }
 
+/// Language tag in a subtitle file name: `Film.tr.srt`, `Film.eng.forced.srt` → code.
+pub fn language_of(subtitle: &Path) -> Option<&'static str> {
+    let stem = subtitle.file_stem()?.to_string_lossy().to_lowercase();
+    stem.rsplit(['.', '_', '-']).take(3).find_map(|t| lang::find(t)).map(|l| l.code)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -134,6 +140,9 @@ mod tests {
         assert_eq!(film.existing.len(), 3, "{:?}", film.existing);
         assert!(langs.contains(&Some("tr")) && langs.contains(&Some("en")) && langs.contains(&None));
         assert!(film.has_language("tr"));
+
+        assert_eq!(language_of(Path::new("a/Film.2020.eng.forced.srt")), Some("en"));
+        assert_eq!(language_of(Path::new("a/Film.2020.srt")), None);
 
         let all = scan(&dir, true);
         assert_eq!(all.len(), 2, "samples are skipped");
