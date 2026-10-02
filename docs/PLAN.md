@@ -45,15 +45,21 @@ APIs where a site has one, scraping only where it has none. Every source sits be
 - CI on Linux and Windows.
 
 ### Phase 2 — Timing (auto-sync)
-- ffmpeg/ffprobe discovery (PATH, bundled next to the exe, setting).
+- ffmpeg discovery (setting, next to the exe, PATH).
 - Audio → voice activity (webrtc-vad) → align subtitle with `alass-core`; handles offset,
   frame-rate drift and cut/ad splits.
-- Frame-rate detection (ffprobe) and 23.976↔25 conversion.
-- Reference sync: align the wanted-language subtitle to a hash-matched subtitle in another
-  language (no audio needed).
-- "Sync after download" switch; per-file "Sync now"; result shown (offset, confidence).
-- When candidates are close, try-sync the top few and keep the best fit.
-- Manual fine-tune: ± offset with preview of lines at a given time.
+- Frame-rate mismatch (23.976 / 24 / 25) found by trying the ratios against the reference.
+- Reference sync: align to another subtitle that is already in sync (no audio needed).
+- "Sync after download" switch; per-file "Sync to audio" / "Sync to subtitle…"; result shown
+  (shift, frame-rate fix, speech match before → after); a sync that does not improve the match
+  is not applied.
+- Manual fine-tune: −1 s / −0.1 s / +0.1 s / +1 s.
+
+### Later (from Phase 2 ideas)
+- When candidates are close, download and try-sync the top few, keep the best fit (costs
+  downloads from the daily limit, so opt-in).
+- Preview of the lines around a chosen time while fine-tuning.
+- Pick the audio track by language when a video has several.
 
 ### Phase 3 — More sources
 - SubDL, Podnapisi, Addic7ed (Gestdown) providers.

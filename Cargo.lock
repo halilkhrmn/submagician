@@ -155,6 +155,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "alass-core"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f4ad56e53efbd3731dc4fb0db24953d399f9789caa706b4c5a1a715010170124"
+
+[[package]]
 name = "allocator-api2"
 version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5042,6 +5048,7 @@ dependencies = [
 name = "submagician-core"
 version = "0.1.0"
 dependencies = [
+ "alass-core",
  "chardetng",
  "encoding_rs",
  "hunch",
@@ -5052,6 +5059,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "walkdir",
+ "webrtc-vad",
  "zip",
 ]
 
@@ -5970,6 +5978,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b96554aa2acc8ccdb7e1c9a58a7a68dd5d13bccc69cd124cb09406db612a1c9b"
 dependencies = [
  "rustls-pki-types",
+]
+
+[[package]]
+name = "webrtc-vad"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "39a1e40fd6ca90be95459152a2537f2ba4286ee1b13073f7ebcaa74fc94e3008"
+dependencies = [
+ "cc",
 ]
 
 [[package]]

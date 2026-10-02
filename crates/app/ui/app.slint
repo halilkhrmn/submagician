@@ -26,7 +26,8 @@ export struct CandidateRow {
 // Texts built from state codes, so every visible string goes through @tr.
 export global Texts {
     // 0 waiting, 1 searching, 2 found (detail = count), 3 nothing found, 4 downloading,
-    // 5 saved (detail = file name), 6 error (detail = message), 7 already has a wanted subtitle
+    // 5 saved (detail = file name), 6 error (detail = message), 7 already has a wanted subtitle,
+    // 8 syncing, 9 synced (detail = "+1.20 s · 25 → 23.976 fps"), 10 sync failed (detail), 11 timing already fine
     public pure function file-state(state: int, detail: string) -> string {
         if state == 1 { return @tr("Searching…"); }
         if state == 2 { return @tr("{} candidates", detail); }
@@ -35,11 +36,17 @@ export global Texts {
         if state == 5 { return @tr("Saved"); }
         if state == 6 { return @tr("Error: {}", detail); }
         if state == 7 { return @tr("Already has subtitle"); }
+        if state == 8 { return @tr("Syncing…"); }
+        if state == 9 { return @tr("Synced {}", detail); }
+        if state == 10 { return @tr("Saved, sync failed: {}", detail); }
+        if state == 11 { return @tr("Saved, timing fits"); }
         return @tr("Waiting");
     }
 
     public pure function state-color(state: int) -> color {
-        if state == 1 || state == 4 { return #3b82f6; }
+        if state == 1 || state == 4 || state == 8 { return #3b82f6; }
+        if state == 10 { return #d97706; }
+        if state == 9 || state == 11 { return #16a34a; }
         if state == 2 { return #d97706; }
         if state == 3 || state == 6 { return #dc2626; }
         if state == 5 || state == 7 { return #16a34a; }
@@ -49,7 +56,9 @@ export global Texts {
     // 0 ready, 1 scanning, 2 scanned (a = videos), 3 searching (a/b), 4 downloading (a/b),
     // 5 finished (a = saved, b = failed), 6 error (detail), 7 stopped, 8 download limit (detail),
     // 9 one file saved (detail = name, a = downloads left or -1), 10 settings saved,
-    // 11 search finished (a = videos with candidates, b = videos searched)
+    // 11 search finished (a = videos with candidates, b = videos searched), 12 reading audio (a = %),
+    // 13 synced (a/b = speech match before/after %, detail = shift), 14 no ffmpeg,
+    // 15 timing already fits (a = speech match %), 16 shifted (a = ms, detail = file), 17 nothing to sync
     public pure function status(kind: int, a: int, b: int, detail: string) -> string {
         if kind == 1 { return @tr("Scanning folder…"); }
         if kind == 2 { return @tr("Found {} videos.", a); }
@@ -63,6 +72,12 @@ export global Texts {
         if kind == 9 { return @tr("Saved {}.", detail); }
         if kind == 10 { return @tr("Settings saved."); }
         if kind == 11 { return @tr("Search finished: {} of {} videos have subtitles.", a, b); }
+        if kind == 12 { return @tr("Reading the audio… {}%", a); }
+        if kind == 13 { return @tr("Synced: {}. Speech match {}% → {}%.", detail, a, b); }
+        if kind == 14 { return @tr("ffmpeg not found. Install it or set its path in Settings to sync with the audio."); }
+        if kind == 15 { return @tr("Timing already fits ({}% speech match); left unchanged.", a); }
+        if kind == 16 { return @tr("Moved {} by {} ms.", detail, a); }
+        if kind == 17 { return @tr("This video has no subtitle to sync yet."); }
         return @tr("Ready.");
     }
 }
@@ -226,7 +241,7 @@ export component AppWindow inherits Window {
     icon: @image-url("../assets/icon.svg");
     preferred-width: 1180px;
     preferred-height: 720px;
-    min-width: 760px;
+    min-width: 900px;
     min-height: 480px;
 
     in property <string> version;
@@ -252,6 +267,10 @@ export component AppWindow inherits Window {
     in-out property <string> os-username;
     in-out property <string> os-password;
     in-out property <string> os-api-key;
+    in-out property <bool> auto-sync;
+    in-out property <string> ffmpeg-path;
+    // Where ffmpeg was found, "" if not.
+    in property <string> ffmpeg-found;
 
     callback choose-folder();
     callback rescan();
@@ -261,6 +280,9 @@ export component AppWindow inherits Window {
     callback file-selected(int);
     callback search-file(int);
     callback download-candidate(int);
+    callback sync-audio(int);
+    callback sync-reference(int);
+    callback shift(int, int);
     callback save-settings();
 
     VerticalLayout {
@@ -391,6 +413,31 @@ export component AppWindow inherits Window {
                             }
                         }
                     }
+
+                    HorizontalLayout {
+                        spacing: 6px;
+                        property <bool> can-time: !root.busy && root.selected-file >= 0 && root.files[root.selected-file].existing != "";
+                        Text {
+                            text: @tr("Timing:");
+                            vertical-alignment: center;
+                        }
+                        Button {
+                            text: @tr("Sync to audio");
+                            enabled: parent.can-time;
+                            clicked => { root.sync-audio(root.selected-file); }
+                        }
+                        Button {
+                            text: @tr("Sync to subtitle…");
+                            enabled: parent.can-time;
+                            clicked => { root.sync-reference(root.selected-file); }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        for step in [-1000, -100, 100, 1000]: Button {
+                            text: (step > 0 ? "+" : "−") + abs(step / 1000) + " s";
+                            enabled: parent.can-time;
+                            clicked => { root.shift(root.selected-file, step); }
+                        }
+                    }
                 }
             }
 
@@ -413,6 +460,25 @@ export component AppWindow inherits Window {
                                 CheckBox {
                                     text: @tr("Skip videos that already have a subtitle in the first language");
                                     checked <=> root.skip-existing;
+                                }
+                            }
+                        }
+                        GroupBox {
+                            title: @tr("Timing");
+                            VerticalLayout {
+                                spacing: 8px;
+                                CheckBox {
+                                    text: @tr("Sync every downloaded subtitle to the video's audio");
+                                    checked <=> root.auto-sync;
+                                }
+                                Text {
+                                    text: root.ffmpeg-found == "" ? @tr("ffmpeg not found. Install it (or put ffmpeg next to SubMagician) or set its path below.") : @tr("ffmpeg: {}", root.ffmpeg-found);
+                                    wrap: word-wrap;
+                                    opacity: 0.8;
+                                }
+                                LineEdit {
+                                    text <=> root.ffmpeg-path;
+                                    placeholder-text: @tr("ffmpeg path (optional)");
                                 }
                             }
                         }
@@ -474,7 +540,7 @@ export component AppWindow inherits Window {
                         font-weight: 700;
                     }
                     Text {
-                        text: @tr("Finds subtitles for your videos, picks the one made for your file and saves it as UTF-8 next to the video.");
+                        text: @tr("Finds subtitles for your videos, picks the one made for your file, fixes its encoding and timing, and saves it next to the video.");
                         wrap: word-wrap;
                     }
                     Text {

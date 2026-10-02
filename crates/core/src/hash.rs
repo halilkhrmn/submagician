@@ -24,8 +24,8 @@ pub fn hash_reader<R: Read + Seek>(reader: &mut R, size: u64) -> Result<String> 
     for offset in [0, size - CHUNK] {
         reader.seek(SeekFrom::Start(offset))?;
         reader.read_exact(&mut buf)?;
-        for word in buf.chunks_exact(8) {
-            hash = hash.wrapping_add(u64::from_le_bytes(word.try_into().unwrap()));
+        for word in buf.as_chunks::<8>().0 {
+            hash = hash.wrapping_add(u64::from_le_bytes(*word));
         }
     }
     Ok(format!("{hash:016x}"))

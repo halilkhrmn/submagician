@@ -19,6 +19,10 @@ pub struct Settings {
     // TODO(phase 5): move to the OS keyring.
     pub opensubtitles_password: String,
     pub opensubtitles_api_key: String,
+    /// Sync each downloaded subtitle to the video's audio.
+    pub auto_sync: bool,
+    /// ffmpeg to use; empty means look next to the app and on PATH.
+    pub ffmpeg_path: String,
 }
 
 impl Default for Settings {
@@ -32,6 +36,8 @@ impl Default for Settings {
             opensubtitles_username: String::new(),
             opensubtitles_password: String::new(),
             opensubtitles_api_key: String::new(),
+            auto_sync: true,
+            ffmpeg_path: String::new(),
         }
     }
 }

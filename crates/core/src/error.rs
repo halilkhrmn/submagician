@@ -24,4 +24,12 @@ pub enum Error {
     NoSubtitleInArchive,
     #[error("file is too small to hash ({0} bytes)")]
     TooSmallToHash(u64),
+    #[error("ffmpeg was not found")]
+    NoFfmpeg,
+    #[error("ffmpeg failed: {0}")]
+    Ffmpeg(String),
+    #[error("no speech found in the audio")]
+    NoSpeech,
+    #[error("cancelled")]
+    Cancelled,
 }
