@@ -11,9 +11,6 @@ fn main() -> Result<(), slint::PlatformError> {
 
     let settings = settings::Settings::load();
     let ui = AppWindow::new()?;
-    if let Err(e) = slint::select_bundled_translation(settings.ui_translation()) {
-        log::warn!("translation not selected: {e}");
-    }
 
     let runtime =
         tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().expect("tokio runtime");

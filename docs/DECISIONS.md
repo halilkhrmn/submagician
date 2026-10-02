@@ -25,7 +25,7 @@ Numbered, newest last. Each: what, and why.
    trusted +5; machine translated −40; hearing impaired −3; downloads (log) and rating as small
    tie-breakers; a different season/episode rejects the candidate. Languages are ranked first,
    in the user's order.
-9. **UI strings through Slint `@tr` with bundled gettext files** (`crates/app/lang/<lang>/LC_MESSAGES/submagician.po`),
+9. **UI strings through Slint `@tr` with bundled gettext files** (bundle removed for now, see 25) (`crates/app/lang/<lang>/LC_MESSAGES/submagician.po`),
    no translation context. Messages that come from Rust are passed as state codes and turned into
    text in `.slint`, so they are translated too. Core error details stay English for now.
 10. **Settings as JSON in the OS config folder.** The OpenSubtitles password is stored in plain
@@ -68,3 +68,6 @@ Numbered, newest last. Each: what, and why.
     no longer resolves in DNS (CI live test, 2026-10-02).
 24. **No plain-HTTP scrapers for Türkçealtyazı and PlanetDP** (see Phase 3 in PLAN): both need
     JavaScript, so a parser alone would never get past the first request.
+25. **English-only UI for now** (owner's call). The Turkish bundle and the language picker are
+    removed; strings stay in `@tr(...)`, so a language system can come back by adding `.po` files
+    and `with_bundled_translations` in `build.rs`.

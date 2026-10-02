@@ -12,8 +12,6 @@ pub struct Settings {
     pub languages: String,
     pub recursive: bool,
     pub skip_existing: bool,
-    /// "auto", "en" or "tr".
-    pub ui_language: String,
     pub last_folder: Option<PathBuf>,
     pub opensubtitles_username: String,
     // TODO(phase 5): move to the OS keyring.
@@ -36,7 +34,6 @@ impl Default for Settings {
             languages: default_languages(),
             recursive: true,
             skip_existing: true,
-            ui_language: "auto".into(),
             last_folder: None,
             opensubtitles_username: String::new(),
             opensubtitles_password: String::new(),
@@ -95,14 +92,5 @@ impl Settings {
     pub fn language_codes(&self) -> Vec<String> {
         let codes = submagician_core::lang::parse_list(&self.languages);
         if codes.is_empty() { vec!["en".into()] } else { codes.into_iter().map(String::from).collect() }
-    }
-
-    /// The UI translation to select: "" for English.
-    pub fn ui_translation(&self) -> &'static str {
-        let lang = match self.ui_language.as_str() {
-            "auto" => system_language().unwrap_or_default(),
-            other => other.to_owned(),
-        };
-        if lang == "tr" { "tr" } else { "" }
     }
 }

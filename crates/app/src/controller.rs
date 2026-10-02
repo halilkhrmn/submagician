@@ -742,11 +742,6 @@ fn apply_settings(ui: &AppWindow, s: &Settings) {
     ui.set_languages(s.language_codes().join(", ").into());
     ui.set_recursive(s.recursive);
     ui.set_skip_existing(s.skip_existing);
-    ui.set_ui_language(match s.ui_language.as_str() {
-        "en" => 1,
-        "tr" => 2,
-        _ => 0,
-    });
     ui.set_os_username(s.opensubtitles_username.clone().into());
     ui.set_os_password(s.opensubtitles_password.clone().into());
     ui.set_os_api_key(s.opensubtitles_api_key.clone().into());
@@ -762,12 +757,6 @@ fn read_settings(ui: &AppWindow, s: &mut Settings) {
     s.languages = ui.get_languages().into();
     s.recursive = ui.get_recursive();
     s.skip_existing = ui.get_skip_existing();
-    s.ui_language = match ui.get_ui_language() {
-        1 => "en",
-        2 => "tr",
-        _ => "auto",
-    }
-    .into();
     s.opensubtitles_username = ui.get_os_username().trim().into();
     s.opensubtitles_password = ui.get_os_password().into();
     s.opensubtitles_api_key = ui.get_os_api_key().trim().into();

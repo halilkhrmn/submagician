@@ -265,7 +265,6 @@ export component AppWindow inherits Window {
     in-out property <string> languages;
     in-out property <bool> recursive;
     in-out property <bool> skip-existing;
-    in-out property <int> ui-language;
     in-out property <string> os-username;
     in-out property <string> os-password;
     in-out property <string> os-api-key;
@@ -542,19 +541,6 @@ export component AppWindow inherits Window {
                                 LineEdit {
                                     text <=> root.os-api-key;
                                     placeholder-text: root.has-builtin-key ? @tr("API key (optional, built-in key is used)") : @tr("API key (required: this build has no built-in key)");
-                                }
-                            }
-                        }
-                        GroupBox {
-                            title: @tr("Interface");
-                            VerticalLayout {
-                                spacing: 8px;
-                                Text {
-                                    text: @tr("Language (applies after restart)");
-                                }
-                                ComboBox {
-                                    model: [@tr("Automatic"), "English", "Türkçe"];
-                                    current-index <=> root.ui-language;
                                 }
                             }
                         }

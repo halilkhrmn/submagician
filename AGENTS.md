@@ -30,9 +30,9 @@ Work-log entries: newest on top, `### YYYY-MM-DD — short title`, then bullets 
 - Provider application keys come from build-time env (`SUBMAGICIAN_OPENSUBTITLES_API_KEY`,
   `SUBMAGICIAN_SUBDL_API_KEY`) and CI secrets (`OPENSUBTITLES_API_KEY`, `SUBDL_API_KEY`); never
   commit them.
-- User-visible strings go through `@tr` in `.slint`; add the Turkish text to
-  `crates/app/lang/tr/LC_MESSAGES/submagician.po` in the same change. Rust passes state codes,
-  not sentences.
+- The UI is English only for now (translations come later). Keep every user-visible string in
+  `.slint` inside `@tr(...)` so translations can be added as gettext files without code changes;
+  Rust passes state codes, not sentences.
 - `README.md` is the main README and stays in English; `README.tr.md` is its translation. Change
   them together.
 
@@ -75,7 +75,6 @@ crates/app/    submagician (binary)
   src/main.rs  startup, translation selection, tokio runtime
   src/controller.rs  UI callbacks → tokio tasks → upgrade_in_event_loop; batch runs, epochs
   src/settings.rs    JSON settings in the OS config folder
-  lang/tr/…/submagician.po  Turkish UI
   assets/icon.svg
 docs/          PLAN, PROGRESS, DECISIONS
 ```
