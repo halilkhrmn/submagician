@@ -30,5 +30,6 @@ Numbered, newest last. Each: what, and why.
    text in `.slint`, so they are translated too. Core error details stay English for now.
 10. **Settings as JSON in the OS config folder.** The OpenSubtitles password is stored in plain
     text until Phase 6 moves it to the keyring.
-11. **Slint license.** Slint is used under its royalty-free desktop license, which needs the
-    `AboutSlint` notice; it is on the About tab. The repository's own license is not chosen yet.
+11. **License: AGPL-3.0** (the owner's choice when the repository was created). Slint is used
+    under its GPLv3 option, which AGPL-3.0 §13 allows combining with; the `AboutSlint` notice on
+    the About tab is kept anyway.

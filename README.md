@@ -33,4 +33,4 @@ Rust 1.88+. On Linux: `libfontconfig1-dev libxkbcommon-dev`.
 SUBMAGICIAN_OPENSUBTITLES_API_KEY=your-app-key cargo build --release -p submagician
 ```
 
-See `docs/PLAN.md` for the roadmap.
+See `docs/PLAN.md` for the roadmap. License: AGPL-3.0.

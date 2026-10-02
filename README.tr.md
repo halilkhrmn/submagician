@@ -32,4 +32,4 @@ Rust 1.88+. Linux'ta: `libfontconfig1-dev libxkbcommon-dev`.
 SUBMAGICIAN_OPENSUBTITLES_API_KEY=uygulama-anahtari cargo build --release -p submagician
 ```
 
-Yol haritası için `docs/PLAN.md`.
+Yol haritası için `docs/PLAN.md`. Lisans: AGPL-3.0.
