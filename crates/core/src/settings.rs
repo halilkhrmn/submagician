@@ -1,9 +1,18 @@
-//! Settings stored as JSON in the user's config folder.
+//! Settings stored as JSON in the user's config folder, shared by the app and the CLI.
 
 use std::fs;
 use std::path::PathBuf;
 
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
+
+use crate::cache::SearchCache;
+use crate::engine::Engine;
+use crate::provider::Provider;
+use crate::provider::gestdown::Gestdown;
+use crate::provider::opensubtitles::{Credentials, OpenSubtitles};
+use crate::provider::subdl::SubDl;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -52,7 +61,7 @@ impl Default for Settings {
 fn default_languages() -> String {
     match system_language().as_deref() {
         Some("en") | None => "en".into(),
-        Some(code) if submagician_core::lang::find(code).is_some() => format!("{code}, en"),
+        Some(code) if crate::lang::find(code).is_some() => format!("{code}, en"),
         _ => "en".into(),
     }
 }
@@ -90,7 +99,33 @@ impl Settings {
 
     /// Parsed language codes; English when the list has nothing usable.
     pub fn language_codes(&self) -> Vec<String> {
-        let codes = submagician_core::lang::parse_list(&self.languages);
+        let codes = crate::lang::parse_list(&self.languages);
         if codes.is_empty() { vec!["en".into()] } else { codes.into_iter().map(String::from).collect() }
+    }
+
+    /// An engine with the providers switched on here (SubDL only when it has a key) and the
+    /// search cache.
+    pub fn engine(&self) -> Engine {
+        let mut providers: Vec<Arc<dyn Provider>> = Vec::new();
+        if self.use_opensubtitles {
+            let credentials = Credentials {
+                username: self.opensubtitles_username.clone(),
+                password: self.opensubtitles_password.clone(),
+            };
+            providers.push(Arc::new(OpenSubtitles::new(Some(self.opensubtitles_api_key.clone()), Some(credentials))));
+        }
+        if self.use_subdl
+            && let Some(subdl) = SubDl::new(Some(self.subdl_api_key.clone()))
+        {
+            providers.push(Arc::new(subdl));
+        }
+        if self.use_addic7ed {
+            providers.push(Arc::new(Gestdown::new()));
+        }
+        let mut engine = Engine::new(providers);
+        if let Some(dir) = Self::search_cache_dir() {
+            engine = engine.with_cache(SearchCache::new(dir));
+        }
+        engine
     }
 }

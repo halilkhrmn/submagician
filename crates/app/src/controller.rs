@@ -12,15 +12,14 @@ use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
 use submagician_core::cache::SearchCache;
 use submagician_core::engine::{Engine, Saved};
 use submagician_core::media::{self, MediaFile};
-use submagician_core::provider::gestdown::Gestdown;
-use submagician_core::provider::opensubtitles::{self, Credentials, OpenSubtitles};
-use submagician_core::provider::subdl::{self, SubDl};
-use submagician_core::provider::{Candidate, Provider, SearchQuery};
+use submagician_core::provider::opensubtitles;
+use submagician_core::provider::subdl;
+use submagician_core::provider::{Candidate, SearchQuery};
+use submagician_core::settings::Settings;
 use submagician_core::sync::{self, Report, Span};
 use submagician_core::{Error, audio, probe, score};
 use tokio::runtime::Handle;
 
-use crate::settings::Settings;
 use crate::{AppWindow, CandidateRow, FileRow};
 
 // File states, as in Texts.file-state.
@@ -118,27 +117,8 @@ fn is_fatal(e: &Error) -> bool {
     matches!(e, Error::NotConfigured { .. } | Error::Auth { .. } | Error::Quota { .. })
 }
 
-/// The providers switched on in the settings (SubDL only when it has a key).
 fn build_engine(s: &Settings) -> Arc<Engine> {
-    let mut providers: Vec<Arc<dyn Provider>> = Vec::new();
-    if s.use_opensubtitles {
-        let credentials =
-            Credentials { username: s.opensubtitles_username.clone(), password: s.opensubtitles_password.clone() };
-        providers.push(Arc::new(OpenSubtitles::new(Some(s.opensubtitles_api_key.clone()), Some(credentials))));
-    }
-    if s.use_subdl
-        && let Some(subdl) = SubDl::new(Some(s.subdl_api_key.clone()))
-    {
-        providers.push(Arc::new(subdl));
-    }
-    if s.use_addic7ed {
-        providers.push(Arc::new(Gestdown::new()));
-    }
-    let mut engine = Engine::new(providers);
-    if let Some(dir) = Settings::search_cache_dir() {
-        engine = engine.with_cache(SearchCache::new(dir));
-    }
-    Arc::new(engine)
+    Arc::new(s.engine())
 }
 
 impl Controller {
@@ -675,8 +655,8 @@ impl Controller {
         let pct = |v: f32| (v * 100.0).round() as i32;
         match &result {
             Ok(r) if r.applied => {
-                self.set_state(epoch, index, SYNCED, sync_detail(r));
-                self.status(ST_SYNCED, pct(r.overlap_before), pct(r.overlap_after), sync_detail(r));
+                self.set_state(epoch, index, SYNCED, r.summary());
+                self.status(ST_SYNCED, pct(r.overlap_before), pct(r.overlap_after), r.summary());
             }
             Ok(r) => {
                 self.set_state(epoch, index, TIMING_OK, "");
@@ -840,23 +820,6 @@ fn ffmpeg_text(s: &Settings) -> String {
 
 fn file_name(path: &Path) -> String {
     path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
-}
-
-/// "+4.00 s" and, for a frame-rate fix, "· 25 → 23.976 fps".
-fn sync_detail(r: &Report) -> String {
-    let mut out = format!("{:+.2} s", r.offset_ms as f64 / 1000.0);
-    if (r.ratio - 1.0).abs() > 1e-6 {
-        const RATES: [f64; 3] = [23.976, 24.0, 25.0];
-        let pair = RATES
-            .iter()
-            .flat_map(|a| RATES.iter().map(move |b| (*a, *b)))
-            .find(|(a, b)| (a / b - r.ratio).abs() < 1e-6);
-        out += &match pair {
-            Some((a, b)) => format!(" · {a} → {b} fps"),
-            None => format!(" · ×{:.4}", r.ratio),
-        };
-    }
-    out
 }
 
 fn file_row(root: &Path, it: &Item) -> FileRow {

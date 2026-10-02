@@ -5031,7 +5031,6 @@ dependencies = [
 name = "submagician"
 version = "0.1.0"
 dependencies = [
- "directories",
  "env_logger",
  "log",
  "rfd",
@@ -5040,7 +5039,17 @@ dependencies = [
  "slint",
  "slint-build",
  "submagician-core",
- "sys-locale",
+ "tokio",
+]
+
+[[package]]
+name = "submagician-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "env_logger",
+ "log",
+ "submagician-core",
  "tokio",
 ]
 
@@ -5050,12 +5059,14 @@ version = "0.1.0"
 dependencies = [
  "alass-core",
  "chardetng",
+ "directories",
  "encoding_rs",
  "hunch",
  "log",
  "reqwest",
  "serde",
  "serde_json",
+ "sys-locale",
  "thiserror 2.0.21",
  "tokio",
  "walkdir",

@@ -16,6 +16,7 @@ pub mod output;
 pub mod probe;
 pub mod provider;
 pub mod score;
+pub mod settings;
 pub mod sync;
 pub mod text;
 pub mod timing;

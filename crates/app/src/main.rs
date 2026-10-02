@@ -2,14 +2,13 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod controller;
-mod settings;
 
 slint::include_modules!();
 
 fn main() -> Result<(), slint::PlatformError> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
-    let settings = settings::Settings::load();
+    let settings = submagician_core::settings::Settings::load();
     let ui = AppWindow::new()?;
 
     let runtime =

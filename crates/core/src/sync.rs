@@ -37,6 +37,25 @@ pub struct Report {
     pub applied: bool,
 }
 
+impl Report {
+    /// "+4.00 s" and, for a frame-rate fix, "· 25 → 23.976 fps" (numbers only, no words).
+    pub fn summary(&self) -> String {
+        let mut out = format!("{:+.2} s", self.offset_ms as f64 / 1000.0);
+        if (self.ratio - 1.0).abs() > 1e-6 {
+            const RATES: [f64; 3] = [23.976, 24.0, 25.0];
+            let pair = RATES
+                .iter()
+                .flat_map(|a| RATES.iter().map(move |b| (*a, *b)))
+                .find(|(a, b)| (a / b - self.ratio).abs() < 1e-6);
+            out += &match pair {
+                Some((a, b)) => format!(" · {a} → {b} fps"),
+                None => format!(" · ×{:.4}", self.ratio),
+            };
+        }
+        out
+    }
+}
+
 /// Aligns `doc` to `reference` in place. Leaves `doc` untouched (and `applied: false`) when the
 /// alignment does not fit the reference better than the original timing.
 pub fn align(doc: &mut Document, reference: &[Span]) -> Report {
@@ -248,6 +267,15 @@ mod tests {
         let report = align(&mut doc, &speech);
         assert!(!report.applied);
         assert_eq!(doc.render(), truth.render());
+    }
+
+    #[test]
+    fn summarizes_reports() {
+        let r =
+            Report { offset_ms: -3_800, ratio: 1.0, splits: 0, overlap_before: 0.2, overlap_after: 0.8, applied: true };
+        assert_eq!(r.summary(), "-3.80 s");
+        let r = Report { offset_ms: 1_000, ratio: 25.0 / 23.976, ..r };
+        assert_eq!(r.summary(), "+1.00 s · 25 → 23.976 fps");
     }
 
     #[test]
