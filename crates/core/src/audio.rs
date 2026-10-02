@@ -25,7 +25,8 @@ fn exe_name(tool: &str) -> String {
     if cfg!(windows) { format!("{tool}.exe") } else { tool.to_owned() }
 }
 
-/// Finds ffmpeg: the configured path, next to SubMagician's executable, then on `PATH`.
+/// Finds ffmpeg: the configured path, next to SubMagician's executable, the one Settings
+/// downloaded (Windows), then on `PATH`.
 pub fn find_ffmpeg(configured: Option<&Path>) -> Option<PathBuf> {
     if let Some(p) = configured.filter(|p| !p.as_os_str().is_empty()) {
         return p.is_file().then(|| p.to_path_buf());
@@ -47,7 +48,8 @@ pub fn find_ffprobe(configured_ffmpeg: Option<&Path>) -> Option<PathBuf> {
 fn find_tool(tool: &str) -> Option<PathBuf> {
     let name = exe_name(tool);
     let beside = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join(&name)));
-    if let Some(p) = beside.filter(|p| p.is_file()) {
+    let installed = crate::tools::tools_dir().map(|d| d.join(&name));
+    if let Some(p) = beside.into_iter().chain(installed).find(|p| p.is_file()) {
         return Some(p);
     }
     let path = std::env::var_os("PATH")?;

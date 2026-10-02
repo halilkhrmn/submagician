@@ -88,9 +88,8 @@ fn collect(paths: &[PathBuf], recursive: bool) -> Vec<MediaFile> {
     for p in paths {
         if p.is_dir() {
             out.extend(media::scan(p, recursive));
-        } else if p.extension().is_some_and(|e| media::is_video_ext(&e.to_string_lossy())) {
-            let size = p.metadata().map(|m| m.len()).unwrap_or(0);
-            out.push(MediaFile { path: p.clone(), size, existing: media::existing_subtitles(p), embedded: Vec::new() });
+        } else if let Some(video) = media::media_file(p) {
+            out.push(video);
         } else {
             eprintln!("skipped {}: not a folder or a video", p.display());
         }

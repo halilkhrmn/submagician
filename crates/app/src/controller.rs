@@ -17,7 +17,7 @@ use submagician_core::provider::subdl;
 use submagician_core::provider::{Candidate, SearchQuery};
 use submagician_core::settings::Settings;
 use submagician_core::sync::{self, Report, Span};
-use submagician_core::{Error, audio, integration, name, output, probe, score, speech, watch};
+use submagician_core::{Error, audio, integration, name, output, probe, score, speech, tools, watch};
 use tokio::runtime::Handle;
 
 use crate::{AppWindow, CandidateRow, FileRow};
@@ -67,6 +67,8 @@ const ST_MODEL_READY: i32 = 25;
 const ST_LISTENING: i32 = 26;
 const ST_GENERATED: i32 = 27;
 const ST_NO_MODEL: i32 = 28;
+const ST_FFMPEG_DOWNLOAD: i32 = 29;
+const ST_FFMPEG_READY: i32 = 30;
 
 /// A new video in a watched folder is handled once its size has not changed for this long.
 const WATCH_SETTLE: Duration = Duration::from_secs(10);
@@ -126,6 +128,8 @@ struct Shared {
     speech: Mutex<HashMap<PathBuf, Arc<Vec<Span>>>>,
     /// Video to select once the folder scan that is running now has finished.
     select_after_scan: Mutex<Option<PathBuf>>,
+    /// When videos were opened one by one (not a folder): the list to show instead of a scan.
+    opened_files: Mutex<Option<Vec<PathBuf>>>,
     /// The folder watch, while it is on.
     watcher: Mutex<Option<watch::WatchHandle>>,
     watch_tx: tokio::sync::mpsc::UnboundedSender<(u64, PathBuf)>,
@@ -181,6 +185,7 @@ impl Controller {
                 cancel: Arc::new(AtomicBool::new(false)),
                 speech: Mutex::new(HashMap::new()),
                 select_after_scan: Mutex::new(None),
+                opened_files: Mutex::new(None),
                 watcher: Mutex::new(None),
                 watch_tx,
             }),
@@ -192,11 +197,23 @@ impl Controller {
             let c = c.clone();
             move || c.choose_folder()
         });
+        ui.on_choose_videos({
+            let c = c.clone();
+            move || c.choose_videos()
+        });
+        ui.on_download_ffmpeg({
+            let c = c.clone();
+            move || c.download_ffmpeg()
+        });
+        ui.set_can_download_ffmpeg(cfg!(windows));
         ui.on_rescan({
             let c = c.clone();
             move || {
-                if let Some(root) = c.shared.root.lock().unwrap().clone() {
-                    c.open_folder(root);
+                let files = c.shared.opened_files.lock().unwrap().clone();
+                match (files, c.shared.root.lock().unwrap().clone()) {
+                    (Some(files), _) => c.open_files(files),
+                    (None, Some(root)) => c.open_folder(root),
+                    _ => {}
                 }
             }
         });
@@ -354,6 +371,31 @@ impl Controller {
         }
     }
 
+    /// Windows: downloads ffmpeg and ffprobe into the tools folder (Settings → Timing).
+    fn download_ffmpeg(&self) {
+        let Some(dir) = tools::tools_dir() else { return };
+        let c = self.clone();
+        self.run_busy(async move {
+            let reporter = c.clone();
+            let mut last = -1;
+            let mut progress = move |done: u64, total: Option<u64>| {
+                let pct = total.filter(|t| *t > 0).map_or(0, |t| (done * 100 / t) as i32);
+                if pct != last {
+                    last = pct;
+                    reporter.status(ST_FFMPEG_DOWNLOAD, pct, 0, "");
+                    reporter.progress(pct as f32 / 100.0);
+                }
+            };
+            match tools::download_ffmpeg(&dir, &c.shared.cancel, &mut progress).await {
+                Ok(()) => c.status(ST_FFMPEG_READY, 0, 0, ""),
+                Err(Error::Cancelled) => c.status(ST_STOPPED, 0, 0, ""),
+                Err(e) => c.status(ST_ERROR, 0, 0, e.to_string()),
+            }
+            let found = ffmpeg_text(&c.shared.settings.lock().unwrap());
+            let _ = c.ui.upgrade_in_event_loop(move |ui| ui.set_ffmpeg_found(found.into()));
+        });
+    }
+
     /// Adds or removes "Find subtitles" in the file manager.
     fn set_menu(&self, add: bool) {
         let result = if add {
@@ -377,10 +419,20 @@ impl Controller {
     pub fn open_path(&self, path: PathBuf) {
         if path.is_dir() {
             self.open_folder(path);
-        } else if let Some(folder) = path.parent().filter(|_| path.is_file()) {
-            *self.shared.select_after_scan.lock().unwrap() = Some(path.clone());
-            self.open_folder(folder.to_path_buf());
+        } else if path.is_file() {
+            self.open_files(vec![path]);
         }
+    }
+
+    /// Lists just these videos (not their whole folder) and selects the first.
+    pub fn open_files(&self, files: Vec<PathBuf>) {
+        let Some(folder) = files.first().and_then(|f| f.parent()).map(Path::to_path_buf) else { return };
+        *self.shared.select_after_scan.lock().unwrap() = files.first().cloned();
+        self.open(folder, Some(files));
+    }
+
+    fn open_folder(&self, folder: PathBuf) {
+        self.open(folder, None);
     }
 
     /// Runs `action` on the path of video `index` and reports a failure in the status bar.
@@ -429,6 +481,9 @@ impl Controller {
 
     fn status(&self, kind: i32, a: i32, b: i32, detail: impl Into<String>) {
         let detail = detail.into();
+        if kind == ST_ERROR || kind == ST_NO_FFMPEG {
+            log::warn!("status {kind}: {detail}");
+        }
         let _ = self.ui.upgrade_in_event_loop(move |ui| {
             ui.set_status_kind(kind);
             ui.set_status_a(a);
@@ -441,21 +496,44 @@ impl Controller {
         let _ = self.ui.upgrade_in_event_loop(move |ui| ui.set_progress(value));
     }
 
-    fn choose_folder(&self) {
-        let start = self.shared.root.lock().unwrap().clone();
+    /// A file dialog owned by the window, so it opens in front of it (an ownerless dialog on
+    /// Windows can open behind the window, which then looks frozen).
+    fn dialog(&self, start: Option<PathBuf>) -> rfd::FileDialog {
         let mut dialog = rfd::FileDialog::new();
+        if let Some(ui) = self.ui.upgrade() {
+            dialog = dialog.set_parent(&ui.window().window_handle());
+        }
         if let Some(dir) = start {
             dialog = dialog.set_directory(dir);
         }
-        if let Some(folder) = dialog.pick_folder() {
+        dialog
+    }
+
+    fn choose_folder(&self) {
+        let start = self.shared.root.lock().unwrap().clone();
+        if let Some(folder) = self.dialog(start).pick_folder() {
             self.open_folder(folder);
         }
     }
 
-    fn open_folder(&self, folder: PathBuf) {
+    fn choose_videos(&self) {
+        let start = self.shared.root.lock().unwrap().clone();
+        if let Some(files) = self.dialog(start).add_filter("Videos", media::VIDEO_EXTS).pick_files() {
+            self.open_files(files);
+        }
+    }
+
+    /// Shows the videos of `folder`, or only `files` when given.
+    fn open(&self, folder: PathBuf, files: Option<Vec<PathBuf>>) {
         if self.ui.upgrade().is_some_and(|ui| ui.get_busy()) {
             return;
         }
+        log::info!(
+            "open {} ({})",
+            folder.display(),
+            files.as_ref().map_or("folder".into(), |f| format!("{} files", f.len()))
+        );
+        *self.shared.opened_files.lock().unwrap() = files.clone();
         let recursive = {
             let mut s = self.shared.settings.lock().unwrap();
             s.last_folder = Some(folder.clone());
@@ -467,7 +545,11 @@ impl Controller {
         let epoch = self.shared.generation.fetch_add(1, Ordering::SeqCst) + 1;
         *self.shared.root.lock().unwrap() = Some(folder.clone());
         if let Some(ui) = self.ui.upgrade() {
-            ui.set_folder(folder.display().to_string().into());
+            let shown = match files.as_deref() {
+                Some([one]) => one.display().to_string(),
+                _ => folder.display().to_string(),
+            };
+            ui.set_folder(shown.into());
             ui.set_files(ModelRc::default());
             ui.set_candidates(ModelRc::default());
             ui.set_selected_file(-1);
@@ -477,8 +559,12 @@ impl Controller {
         let c = self.clone();
         self.run_busy(async move {
             let scan_dir = folder.clone();
-            let found =
-                tokio::task::spawn_blocking(move || media::scan(&scan_dir, recursive)).await.unwrap_or_default();
+            let found = tokio::task::spawn_blocking(move || match files {
+                Some(files) => files.iter().filter_map(|f| media::media_file(f)).collect(),
+                None => media::scan(&scan_dir, recursive),
+            })
+            .await
+            .unwrap_or_default();
             if c.generation() != epoch {
                 return;
             }
@@ -804,8 +890,10 @@ impl Controller {
             (s.watch, s.recursive)
         };
         let root = self.shared.root.lock().unwrap().clone();
+        let single_files = self.shared.opened_files.lock().unwrap().is_some();
         let mut slot = self.shared.watcher.lock().unwrap();
         *slot = None;
+        let root = root.filter(|_| !single_files);
         let (true, Some(root)) = (on, root) else { return };
         let epoch = self.generation();
         let tx = self.shared.watch_tx.clone();
@@ -847,12 +935,7 @@ impl Controller {
             if let Some(i) = items.iter().position(|it| it.media.path == path) {
                 return Some(i);
             }
-            let media = MediaFile {
-                path: path.to_path_buf(),
-                size: path.metadata().map(|m| m.len()).unwrap_or(0),
-                existing: media::existing_subtitles(path),
-                embedded: Vec::new(),
-            };
+            let media = media::media_file(path)?;
             items.push(Item::new(media));
             let index = items.len() - 1;
             (index, file_row(&root, &items[index], &first))
@@ -979,11 +1062,7 @@ impl Controller {
                 .unwrap()
                 .get(index)
                 .and_then(|it| it.media.path.parent().map(Path::to_path_buf));
-            let mut dialog = rfd::FileDialog::new().add_filter("Subtitles", media::SUBTITLE_EXTS);
-            if let Some(dir) = dir {
-                dialog = dialog.set_directory(dir);
-            }
-            match dialog.pick_file() {
+            match self.dialog(dir).add_filter("Subtitles", media::SUBTITLE_EXTS).pick_file() {
                 Some(file) => Reference::Subtitle(file),
                 None => return,
             }
@@ -1036,6 +1115,8 @@ impl Controller {
         let Some(video) = self.shared.items.lock().unwrap().get(index).map(|it| it.media.path.clone()) else {
             return Err(Error::Parse("no such video".into()));
         };
+        let what = if matches!(reference, Reference::Audio) { "audio" } else { "subtitle" };
+        log::info!("sync {} to {what}", target.display());
         self.set_state(epoch, index, SYNCING, "");
         let result = async {
             let spans = match reference {
@@ -1053,6 +1134,7 @@ impl Controller {
         }
         .await;
         let pct = |v: f32| (v * 100.0).round() as i32;
+        log::info!("sync result: {result:?}");
         match &result {
             Ok(r) if r.applied => {
                 self.set_state(epoch, index, SYNCED, r.summary());
@@ -1063,7 +1145,8 @@ impl Controller {
                 self.status(ST_TIMING_OK, pct(r.overlap_before), 0, "");
             }
             Err(Error::NoFfmpeg) => {
-                self.set_state(epoch, index, SYNC_FAILED, "ffmpeg");
+                // Not the subtitle's fault: it stays saved, the status bar says what is missing.
+                self.set_state(epoch, index, SAVED, file_name(&target));
                 self.status(ST_NO_FFMPEG, 0, 0, "");
             }
             Err(Error::Cancelled) => {

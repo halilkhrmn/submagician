@@ -28,8 +28,8 @@ kodlamasını ve zamanlamasını düzeltir ve videonun yanına kaydeder. Windows
    bozuk bir dosyayı **Search as…** ile başka bir adla arayabilirsin.
 3. Altyazı `Film.mkv` dosyasının yanına `Film.tr.srt` olarak kaydedilir; oynatıcılar kendisi
    açar. Üzerine yazılan dosya saklanır, **Restore previous** onu geri getirir.
-4. **ffmpeg** kuruluysa indirmeden hemen sonra sese göre senkronlanır (Settings → Timing);
-   zaten olan bir altyazı için **Sync to audio**'ya tıkla.
+4. **ffmpeg** varsa indirmeden hemen sonra sese göre senkronlanır; zaten olan bir altyazı için
+   **Sync to audio**'ya tıkla. Windows'ta Settings → Timing → **Download ffmpeg** onu indirir.
 
 ![Senkron](docs/img/sync.png)
 

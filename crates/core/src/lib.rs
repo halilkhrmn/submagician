@@ -23,6 +23,7 @@ pub mod speech;
 pub mod sync;
 pub mod text;
 pub mod timing;
+pub mod tools;
 pub mod watch;
 
 pub use error::{Error, Result};
