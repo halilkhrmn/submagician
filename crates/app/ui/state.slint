@@ -89,6 +89,7 @@ export global Texts {
     // 38 taken out, timing fits (detail = file, a = speech match %), 39 no ffmpeg/ffprobe for tracks
     public pure function status(kind: int, a: int, b: int, detail: string) -> string {
         if kind == 1 { return @tr("Scanning folder…"); }
+        if kind == 2 && a == 1 { return @tr("Found 1 video."); }
         if kind == 2 { return @tr("Found {} videos.", a); }
         if kind == 3 { return @tr("Searching {} / {}…", a, b); }
         if kind == 4 { return @tr("Getting subtitles {} / {}…", a, b); }

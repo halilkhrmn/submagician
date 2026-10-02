@@ -7,66 +7,108 @@ kodlamasını ve zamanlamasını düzeltir ve videonun yanına kaydeder. Windows
 
 ![SubMagician](docs/img/main.png)
 
+## İndir
+
+[Sürümler sayfasından](https://github.com/halilkhrmn/submagician/releases):
+
+- **Windows**: `submagician-setup-….exe` (yönetici izni gerekmez, ffmpeg dahil) ya da taşınabilir
+  zip.
+- **Linux**: `SubMagician-…-x86_64.AppImage` (çalıştırılabilir yapıp aç) ya da Debian/Ubuntu için
+  `.deb` (`sudo apt install ./submagician_….deb`).
+
+Kurulum dosyası ve AppImage kendini günceller: yeni sürüm çıkınca SubMagician haber verir,
+güncellemeden sonra neyin yeni olduğunu gösterir.
+
 ## Neden
 
 - Hash eşleşmesi her zaman doğru değil, isimle arayınca da onlarca sürüm arasından tahmin
   etmek gerekiyor. SubMagician her adayı puanlar: hash eşleşmesi, release grubu, kaynak
   (BluRay/WEB), yayın servisi, çözünürlük, isim benzerliği; yanlış bölümler elenir.
 - Bozuk Türkçe karakterler (Windows-1254) düzeltilir; her şey UTF-8 olarak kaydedilir.
-- Zamanlama videonun sesinden düzeltilir: kayma, kare hızı (23.976 / 24 / 25) ve kesilmiş ya
-  da eklenmiş sahneler. Altyazı zaten uyuyorsa dokunulmaz. Senkron olan başka bir altyazıya göre
-  de senkronlayabilir ya da ±0,1 s / ±1 s kaydırabilirsin.
+- Zamanlama videonun sesinden saniyeler içinde düzeltilir: kayma, kare hızı (23.976 / 24 / 25)
+  ve kesilmiş ya da eklenmiş sahneler. Altyazı zaten uyuyorsa dokunulmaz.
 - Kaynaklar: OpenSubtitles, SubDL ve Addic7ed (diziler, Gestdown üzerinden); her biri
   kapatılabilir. Sonuçlar birkaç gün önbellekte tutulur. RAR ve 7z arşivleri bsdtar / 7-Zip ile
   açılır (Windows 10+ içinde `tar.exe` hazır gelir).
 
 ## Kullanım
 
-1. **Choose folder…**, pencereye bir klasör bırak ya da dosya yöneticisinde klasöre sağ tıkla →
-   *Find subtitles with SubMagician* (bu girdiyi Settings → File manager ekler).
-2. **Download best for all** ya da bir videoya tıklayıp puanlı adaylardan birini indir. Adı
-   bozuk bir dosyayı **Search as…** ile başka bir adla arayabilirsin.
-3. Altyazı `Film.mkv` dosyasının yanına `Film.tr.srt` olarak kaydedilir; oynatıcılar kendisi
-   açar. Üzerine yazılan dosya saklanır, **Restore previous** onu geri getirir.
-4. **ffmpeg** varsa indirmeden hemen sonra sese göre senkronlanır; zaten olan bir altyazı için
-   **Sync to audio**'ya tıkla. Windows'ta Settings → Timing → **Download ffmpeg** onu indirir.
+1. **Choose folder…** ya da **Open videos…**, pencereye sürükleyip bırak ya da dosya
+   yöneticisinde bir klasöre sağ tıkla → *Find subtitles with SubMagician* (Settings → File
+   manager bu girişi ekler).
+2. **Get subtitles for all**, ya da bir videoya tıkla: sağdaki panel neyi olduğunu, kaynakların
+   sunduğu altyazıları (en iyisi üstte) ve zamanlamasını gösterir. **Search as…** yanlış
+   adlandırılmış bir dosyayı başka bir adla arar.
+3. Altyazı `Film.mkv`'nin yanına `Film.tr.srt` olarak kaydedilir; oynatıcılar kendiliğinden
+   yükler. Hemen sese senkronlanır. Yerine geçtiği dosya saklanır: *Timing* içindeki geri alma
+   düğmesi onu geri koyar.
 
 ![Senkron](docs/img/sync.png)
 
-Ayrıca:
+Dahası:
 
-- İçinde istenen dilde altyazı izi olan videolar (MKV) atlanır.
-- **Watch folder**: klasöre eklenen yeni videolar, kopyalanması bitince altyazısını kendisi alır.
-- **Only missing** işi bitmiş videoları gizler; listenin altında **Play** ve **Show in folder**
-  var.
-- **Write from audio** (Whisper, bu bilgisayarda): hiçbir kaynakta altyazı yoksa konuşmadan
-  altyazı yazar. Modeli Settings → Speech'ten seçip indir; istersen otomatik de çalışır.
-  İngilizceye her dilden çevirebilir; diğer dillerde konuşulan dilde yazar.
+- **Hızlı senkron**: SubMagician önce filmin her yerinden birkaç kısa parçayı aynı anda dinler;
+  yanlış kayma ya da kare hızı için bu yeter (bir iki saniye). Sahne kesilmiş ya da eklenmişse
+  bütün sesi okur, her işlemci çekirdeğine bir parça. Duyduğunu hatırlar, aynı videoyu yeniden
+  senkronlamak anında olur. *Sync to audio* her altyazıda çalışır; *To a subtitle…* senkron olan
+  başka bir altyazıyı kullanır; ±0,1 s / ±1 s elle kaydırır.
+- **Videonun içindeki altyazılar** (MKV/MP4 parçaları): **Use the subtitle inside** senin
+  dilindekini dosya olarak kaydeder ve sese senkronlar. Resim parçaları (Blu-ray, DVD) metin
+  olarak kullanılamaz.
+- Ağır işler (senkron, sesten yazma) ayrı bir süreçte çalışır: pencere hiç donmaz, her video
+  ilerlemesini gösterir, **Stop** hemen bitirir.
+- **Watch for new videos**: klasöre gelen yeni videolar kopyalanması bitince altyazısını kendisi
+  alır. **Only missing** işi biten videoları gizler.
+- **From audio** (Whisper, bu bilgisayarda): hiçbir kaynakta altyazı yoksa konuşmadan yazılır.
+  Settings → Speech'ten bir model seçip indir; otomatik de çalışabilir. İngilizceye her dilden
+  çevirir; diğer diller konuşulduğu gibi yazılır.
 
-Ayarlar: istenen diller sırayla (`tr, en`), kaynaklar, daha yüksek günlük indirme sınırı için
-isteğe bağlı OpenSubtitles girişi, ffmpeg yolu.
+### Oynatıcı eklentileri
+
+Kenar çubuğundaki **Player plugins** bilgisayarındaki mpv'yi (ve mpv.net'i) ve VLC'yi bulur,
+SubMagician'ı tek tıkla içlerine kurar. Sonra:
+
+- **mpv**: senin dilinde altyazısı olmayan bir video kendiliğinden altyazı alır; **Alt+S** altyazı
+  ister, **Alt+Shift+S** yeniden arar.
+- **VLC**: *Görünüm (View) → SubMagician* oynayan video için altyazı bulur, açık kaldığı sürece
+  başlayan her video için de.
+
+Eklentiler SubMagician'ın ayarlarını kullanır: dillerin, kaynakların, senkron ve Whisper.
+Flatpak ya da Snap'ten kurulan oynatıcılar korumalı alanda çalıştığı için eklentiyi kullanamaz.
+
+![Oynatıcı eklentileri](docs/img/players.png)
+
+### Ayarlar
+
+Sırayla diller (`tr, en`), kaynaklar, günlük indirme sınırını yükseltmek için isteğe bağlı
+OpenSubtitles girişi, senkron ve ffmpeg, Whisper, güncellemeler, kayıtlar. **Logs and
+problems**: uyarılar ve hatalar her zaman `errors.log`'a yazılır; *Save detailed logs* bir süre
+her adımı kaydeder; **Report a problem** ne gönderileceğini aynen gösterir, sonra bir GitHub
+issue'su ya da e-posta açar.
 
 ## Komut satırı
 
-`submagician-cli` aynısını betikler için yapar, uygulamanın ayarlarını kullanır:
+`submagician-cli` aynı işi betikler için yapar, uygulamanın ayarlarını kullanır:
 
 ```sh
-submagician-cli ~/Videolar                    # her video için en iyi altyazı + senkron
+submagician-cli ~/Videos                      # her video için en iyi altyazı + senkron
 submagician-cli -l tr,en --dry-run Film.mkv   # neyi seçeceğini göster
-submagician-cli --sources addic7ed --no-sync ~/Diziler/The.Office
-submagician-cli --download-model base && submagician-cli --generate ~/Videolar
+submagician-cli --from-video ~/Videos         # videoların içindeki altyazıları kullan, senkronla
+submagician-cli --sources addic7ed --no-sync ~/Shows/The.Office
+submagician-cli --download-model base && submagician-cli --generate ~/Videos
 ```
 
-`submagician <klasör ya da video>` uygulamayı o klasörle açar.
+`submagician <klasör ya da video>` uygulamayı o klasörde açar. AppImage'dan:
+`SubMagician-….AppImage --cli …`.
 
 ## Derleme
 
 Rust 1.88+, bir C/C++ derleyicisi ve CMake. Linux'ta: `libfontconfig1-dev libxkbcommon-dev`. Senkron ve
-gömülü izler için: PATH'te ya da programın yanında `ffmpeg` ve `ffprobe`.
+gömülü parçalar için: PATH'te ya da programın yanında `ffmpeg` ve `ffprobe`.
 
 ```sh
 SUBMAGICIAN_OPENSUBTITLES_API_KEY=… SUBMAGICIAN_SUBDL_API_KEY=… \
   cargo build --release -p submagician -p submagician-cli
 ```
 
-Yol haritası için `docs/PLAN.md`. Lisans: AGPL-3.0.
+Paketler: `docs/RELEASING.md`. Yol haritası: `docs/PLAN.md`. Lisans: AGPL-3.0.

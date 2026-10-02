@@ -52,6 +52,9 @@ and `libxkbcommon-dev` (runtime: `libxkbcommon-x11-0` on X11). Syncing to audio 
 | Release build | `cargo build --release -p submagician -p submagician-cli` |
 | CLI | `cargo run -p submagician-cli -- --dry-run <folder>` |
 | Windows compile check from Linux | `rustup target add x86_64-pc-windows-gnu`, MinGW, `cargo check --target x86_64-pc-windows-gnu` |
+| Linux packages (.deb, AppImage) | `tools/build-linux-packages.sh` (needs `cargo install cargo-deb`) |
+| Windows installer + portable zip | `tools\build-installer.ps1` (Inno Setup 6) |
+| Release | raise the version + `changelog/en.md`, merge to main (see `docs/RELEASING.md`) |
 | Headless screenshot (Linux) | `xvfb-run -a env SLINT_BACKEND=winit-software target/debug/submagician` + `import -window root shot.png` |
 
 ## Architecture and file map
@@ -79,17 +82,39 @@ crates/core/   submagician-core, no GUI (shared by app and CLI)
   integration  "Find subtitles" in the file manager (HKCU registry / Linux launchers, scripts)
   tools        Windows: ffmpeg/ffprobe download on request (gyan.dev, SHA-256 checked)
   speech       (feature `whisper`) Whisper models, download, transcription to SRT
+  autosync     fast sync to the audio: speech cache on disk, quick look at windows, full read
+  jobs         heavy jobs (sync, track out of the video, Whisper) and the worker process protocol
+  applog       the log: ring buffer, errors.log always, daily files when switched on, panics
+  update       GitHub release check, download with SHA-256 digest, installer run / AppImage swap
+  whatsnew     notes since the last version from changelog/en.md
+  report       "Report a problem": text, saved file, GitHub issue / mailto links
+  players      mpv / mpv.net / VLC detection and plugin install (scripts from plugins/)
 crates/app/    submagician (binary)
-  ui/app.slint window: Subtitles / Settings / About tabs, Texts global (state codes → @tr text)
-  src/main.rs  startup, tokio runtime, command-line path, drag & drop
+  ui/app.slint  window: sidebar (Library, Player plugins, Settings), update banner, dialogs
+  ui/state.slint  AppState global (all properties/callbacks), Texts (state codes → @tr text)
+  ui/theme.slint, components.slint  colours, Fluent icons (ui/icons), cards, rows, badges
+  ui/library.slint, players.slint, settings.slint, dialogs.slint  the pages and dialogs
+  src/main.rs  startup, log, tokio runtime, command-line path, drag & drop
   src/controller.rs  UI callbacks → tokio tasks → upgrade_in_event_loop; batch runs, epochs
+  src/controller/{updates,support,plugins}.rs  updates + What's new, logs + report, plugins
   src/wayland_drop.rs  drops under Wayland (own wl_data_device on winit's connection)
-  assets/icon.svg
-crates/cli/    submagician-cli: same pipeline for scripts (--lang, --sources, --dry-run, …)
-docs/          PLAN, PROGRESS, DECISIONS
+  assets/icon.svg (+ icon.png, icon.ico for packages)
+crates/cli/    submagician-cli: same pipeline for scripts (--lang, --sources, --dry-run, …);
+               --player (mpv/VLC plugins), --worker (the app's heavy jobs), --from-video
+plugins/       submagician.lua (mpv) and submagician_vlc.lua (VLC), filled in at install
+changelog/     en.md: release notes (What's new in the app, GitHub release text)
+installer/     submagician.iss (Inno Setup, per user, ffmpeg bundled)
+packaging/     linux/submagician.desktop
+tools/         build-installer.ps1, build-linux-packages.sh, smoke tests
+docs/          PLAN, PROGRESS, DECISIONS, RELEASING
 ```
 
 - Work runs on a 2-thread tokio runtime; the UI thread only touches Slint models. Results of old
   work are dropped by comparing the folder *epoch* (bumped on every rescan).
 - One busy operation at a time (`busy` property); batch runs stop on fatal errors (no key, login
   failed, download limit).
+- Syncing to the audio, taking a track out of a video and Whisper run through `core::jobs` in a
+  worker process (`submagician-cli --worker`, or the AppImage with `--cli`); without the tool next
+  to the app they run in-process. Stop kills the worker.
+- Logging: `core::applog` (the app); the CLI uses env_logger on stderr (the app logs a worker's
+  stderr). Never log passwords or keys.

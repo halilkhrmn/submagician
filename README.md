@@ -7,45 +7,83 @@ encoding and the timing, and saves it next to the video. Windows and Linux (macO
 
 ![SubMagician](docs/img/main.png)
 
+## Download
+
+From the [releases page](https://github.com/halilkhrmn/submagician/releases):
+
+- **Windows**: `submagician-setup-….exe` (no admin rights needed, ffmpeg included), or the
+  portable zip.
+- **Linux**: `SubMagician-…-x86_64.AppImage` (make it executable and run it), or the `.deb` for
+  Debian/Ubuntu (`sudo apt install ./submagician_….deb`).
+
+The installer and the AppImage update themselves: SubMagician tells you when a new version is
+out and shows what is new after the update.
+
 ## Why
 
 - A hash match is not always right, and a name search gives you dozens of releases to guess from.
   SubMagician scores every candidate: hash match, release group, source (BluRay/WEB), streaming
   service, resolution, name similarity, wrong episodes rejected.
 - Broken Turkish characters (Windows-1254) are fixed; everything is saved as UTF-8.
-- Timing is fixed from the video's audio: offset, frame rate (23.976 / 24 / 25) and cut or added
-  scenes. If the subtitle already fits, it is left alone. You can also sync to another subtitle
-  that is in sync, or nudge it by ±0.1 s / ±1 s.
+- Timing is fixed from the video's audio in seconds: offset, frame rate (23.976 / 24 / 25) and
+  cut or added scenes. If the subtitle already fits, it is left alone.
 - Sources: OpenSubtitles, SubDL and Addic7ed (TV series, through Gestdown); each can be switched
   off. Results are cached for a few days. RAR and 7z archives are opened with bsdtar / 7-Zip
   (Windows 10+ has `tar.exe` built in).
 
 ## Use
 
-1. **Choose folder…**, drop a folder on the window, or right-click a folder in your file manager
-   → *Find subtitles with SubMagician* (Settings → File manager adds that entry).
-2. **Download best for all**, or click a video to see ranked candidates and download one.
-   A wrongly named file can be searched under another name with **Search as…**.
+1. **Choose folder…** or **Open videos…**, drop them on the window, or right-click a folder in
+   your file manager → *Find subtitles with SubMagician* (Settings → File manager adds that
+   entry).
+2. **Get subtitles for all**, or click a video: the panel on the right shows what it has, the
+   subtitles the sources offer (best first) and its timing. **Search as…** finds a wrongly named
+   file under another name.
 3. The subtitle is saved as `Movie.tr.srt` next to `Movie.mkv`; players load it on their own.
-   The file it replaced is kept, **Restore previous** puts it back.
-4. With **ffmpeg** it is synced to the audio right after the download, or click **Sync to audio**
-   for a subtitle you already have. On Windows, Settings → Timing → **Download ffmpeg** gets it.
+   It is synced to the audio right away. The file it replaced is kept: the undo button in
+   *Timing* puts it back.
 
 ![Sync](docs/img/sync.png)
 
 More:
 
-- Videos that already carry the wanted language inside (an MKV subtitle track) are skipped.
-- **Watch folder**: new videos dropped into the folder get their subtitle on their own, once
-  they have finished copying.
-- **Only missing** hides the videos that are done; **Play** and **Show in folder** are under the
-  list.
-- **Write from audio** (Whisper, on this computer): when no source has a subtitle, one is written
-  from the speech. Pick and download a model in Settings → Speech; it can also run automatically.
+- **Fast sync**: SubMagician first listens to a few short parts across the film at once, which
+  is enough for a wrong offset or frame rate (a second or two). Only when scenes were cut or
+  added does it read the whole audio, one piece per CPU core. What it heard is remembered, so
+  syncing the same video again is instant. *Sync to audio* works on any subtitle; *To a
+  subtitle…* uses another subtitle that is in sync; ±0.1 s / ±1 s nudge it by hand.
+- **Subtitles inside the video** (MKV/MP4 tracks): **Use the subtitle inside** saves the one in
+  your language as a file and syncs it to the audio. Picture tracks (Blu-ray, DVD) cannot be
+  used as text.
+- Heavy work (syncing, writing from the audio) runs in a separate process: the window never
+  freezes, every video shows its progress, **Stop** ends it at once.
+- **Watch for new videos**: new videos in the folder get their subtitle on their own, once they
+  have finished copying. **Only missing** hides the videos that are done.
+- **From audio** (Whisper, on this computer): when no source has a subtitle, one is written from
+  the speech. Pick and download a model in Settings → Speech; it can also run automatically.
   Into English it translates any language; other languages are written as spoken.
 
-Settings: wanted languages in order (`tr, en`), sources, optional OpenSubtitles login for a
-higher daily download limit, ffmpeg path.
+### Player plugins
+
+**Player plugins** in the sidebar finds mpv (and mpv.net) and VLC on your computer and installs
+SubMagician into them with one click. Then:
+
+- **mpv**: a video without a subtitle in your language gets one by itself; **Alt+S** asks for one,
+  **Alt+Shift+S** searches again.
+- **VLC**: *View → SubMagician* finds a subtitle for the video that is playing and, while it is
+  on, for every video that starts.
+
+The plugins use SubMagician's settings: your languages, sources, sync and Whisper. Players
+installed from Flatpak or Snap run in a sandbox and cannot use the plugin.
+
+![Player plugins](docs/img/players.png)
+
+### Settings
+
+Languages in order (`tr, en`), sources, optional OpenSubtitles login for a higher daily download
+limit, sync and ffmpeg, Whisper, updates, logs. **Logs and problems**: warnings and errors are
+always written to `errors.log`; *Save detailed logs* records every step for a while; **Report a
+problem** shows exactly what would be sent, then opens a GitHub issue or an e-mail.
 
 ## Command line
 
@@ -54,11 +92,13 @@ higher daily download limit, ffmpeg path.
 ```sh
 submagician-cli ~/Videos                      # best subtitle + sync for every video
 submagician-cli -l tr,en --dry-run Film.mkv   # show what it would pick
+submagician-cli --from-video ~/Videos         # use the subtitles inside the videos, synced
 submagician-cli --sources addic7ed --no-sync ~/Shows/The.Office
 submagician-cli --download-model base && submagician-cli --generate ~/Videos
 ```
 
-`submagician <folder or video>` opens the app on that folder.
+`submagician <folder or video>` opens the app on that folder. From the AppImage:
+`SubMagician-….AppImage --cli …`.
 
 ## Build
 
@@ -70,4 +110,4 @@ SUBMAGICIAN_OPENSUBTITLES_API_KEY=… SUBMAGICIAN_SUBDL_API_KEY=… \
   cargo build --release -p submagician -p submagician-cli
 ```
 
-See `docs/PLAN.md` for the roadmap. License: AGPL-3.0.
+Packages: see `docs/RELEASING.md`. Roadmap: `docs/PLAN.md`. License: AGPL-3.0.
