@@ -9,5 +9,5 @@ license.workspace = true
 clap = { version = "4.6.7", features = ["derive"] }
 env_logger = "0.11.11"
 log = "0.4.34"
-submagician-core = { version = "0.1.0", path = "../core" }
+submagician-core = { version = "0.1.0", path = "../core", features = ["whisper"] }
 tokio = { version = "1.53.1", features = ["rt", "macros"] }

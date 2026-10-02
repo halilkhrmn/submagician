@@ -37,6 +37,10 @@ pub struct Settings {
     pub subdl_api_key: String,
     /// Watch the open folder and handle new videos automatically.
     pub watch: bool,
+    /// Whisper model id (see `speech::MODELS`).
+    pub whisper_model: String,
+    /// When no source has a subtitle, write one from the audio (needs the model).
+    pub generate_when_missing: bool,
 }
 
 impl Default for Settings {
@@ -56,6 +60,8 @@ impl Default for Settings {
             use_addic7ed: true,
             subdl_api_key: String::new(),
             watch: false,
+            whisper_model: "base".into(),
+            generate_when_missing: false,
         }
     }
 }

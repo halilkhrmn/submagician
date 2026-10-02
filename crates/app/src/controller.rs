@@ -17,7 +17,7 @@ use submagician_core::provider::subdl;
 use submagician_core::provider::{Candidate, SearchQuery};
 use submagician_core::settings::Settings;
 use submagician_core::sync::{self, Report, Span};
-use submagician_core::{Error, audio, integration, name, output, probe, score, watch};
+use submagician_core::{Error, audio, integration, name, output, probe, score, speech, watch};
 use tokio::runtime::Handle;
 
 use crate::{AppWindow, CandidateRow, FileRow};
@@ -35,6 +35,8 @@ const SYNCING: i32 = 8;
 const SYNCED: i32 = 9;
 const SYNC_FAILED: i32 = 10;
 const TIMING_OK: i32 = 11;
+const GENERATING: i32 = 12;
+const GENERATED: i32 = 13;
 
 // Status bar kinds, as in Texts.status.
 const ST_SCANNING: i32 = 1;
@@ -60,6 +62,11 @@ const ST_MENU_REMOVED: i32 = 20;
 const ST_WATCH_NEW: i32 = 21;
 const ST_RESTORED: i32 = 22;
 const ST_NO_BACKUP: i32 = 23;
+const ST_MODEL_DOWNLOAD: i32 = 24;
+const ST_MODEL_READY: i32 = 25;
+const ST_LISTENING: i32 = 26;
+const ST_GENERATED: i32 = 27;
+const ST_NO_MODEL: i32 = 28;
 
 /// A new video in a watched folder is handled once its size has not changed for this long.
 const WATCH_SETTLE: Duration = Duration::from_secs(10);
@@ -114,7 +121,7 @@ struct Shared {
     items: Mutex<Vec<Item>>,
     /// Bumped whenever the file list is replaced, so late results of old work are dropped.
     generation: AtomicU64,
-    cancel: AtomicBool,
+    cancel: Arc<AtomicBool>,
     /// Speech spans per video, so syncing again does not decode the audio again.
     speech: Mutex<HashMap<PathBuf, Arc<Vec<Span>>>>,
     /// Video to select once the folder scan that is running now has finished.
@@ -146,6 +153,12 @@ fn build_engine(s: &Settings) -> Arc<Engine> {
     Arc::new(s.engine())
 }
 
+impl Shared {
+    fn cancel_flag(&self) -> Arc<AtomicBool> {
+        self.cancel.clone()
+    }
+}
+
 impl Controller {
     /// Wires the window to the core. `initial` is a folder or video given on the command line
     /// (file-manager action); without it the last folder is opened again.
@@ -165,7 +178,7 @@ impl Controller {
                 root: Mutex::new(None),
                 items: Mutex::new(Vec::new()),
                 generation: AtomicU64::new(0),
-                cancel: AtomicBool::new(false),
+                cancel: Arc::new(AtomicBool::new(false)),
                 speech: Mutex::new(HashMap::new()),
                 select_after_scan: Mutex::new(None),
                 watcher: Mutex::new(None),
@@ -259,6 +272,37 @@ impl Controller {
                     }
                 }
                 c.update_watch();
+            }
+        });
+        ui.on_generate({
+            let c = c.clone();
+            move |i| {
+                let Ok(index) = usize::try_from(i) else { return };
+                let epoch = c.generation();
+                let w = c.clone();
+                c.run_busy(async move {
+                    let _ = w.generate_item(epoch, index).await;
+                });
+            }
+        });
+        ui.on_download_model({
+            let c = c.clone();
+            move || c.download_model()
+        });
+        ui.on_whisper_model_changed({
+            let c = c.clone();
+            move |index| {
+                let Some(model) = usize::try_from(index).ok().and_then(|i| speech::MODELS.get(i)) else { return };
+                {
+                    let mut s = c.shared.settings.lock().unwrap();
+                    s.whisper_model = model.id.into();
+                    if let Err(e) = s.save() {
+                        log::warn!("settings not saved: {e}");
+                    }
+                }
+                if let Some(ui) = c.ui.upgrade() {
+                    ui.set_whisper_installed(model.installed().is_some());
+                }
             }
         });
         ui.on_search_as({
@@ -643,13 +687,114 @@ impl Controller {
                         return Err(Error::Cancelled);
                     }
                 }
-                Ok(None) => {}
+                Ok(None) => {
+                    let generate = self.shared.settings.lock().unwrap().generate_when_missing;
+                    if generate && self.whisper_model().is_some() {
+                        match self.generate_item(epoch, i).await {
+                            Ok(_) => done.saved = true,
+                            Err(Error::Cancelled) => return Err(Error::Cancelled),
+                            Err(_) => {}
+                        }
+                    }
+                }
                 Err(e) if is_fatal(&e) => return Err(e),
                 Err(_) => {}
             }
             tokio::time::sleep(BATCH_PAUSE).await;
         }
         Ok(done)
+    }
+
+    /// The chosen Whisper model's file, if it is downloaded.
+    fn whisper_model(&self) -> Option<PathBuf> {
+        let id = self.shared.settings.lock().unwrap().whisper_model.clone();
+        speech::model(&id).and_then(|m| m.installed())
+    }
+
+    /// Writes a subtitle for video `index` from its audio with Whisper and saves it next to it.
+    async fn generate_item(&self, epoch: u64, index: usize) -> Result<PathBuf, Error> {
+        let Some(model) = self.whisper_model() else {
+            self.status(ST_NO_MODEL, 0, 0, "");
+            return Err(Error::NotConfigured { provider: "Whisper", message: "no speech model".into() });
+        };
+        let Some(ffmpeg) = self.ffmpeg() else {
+            self.status(ST_NO_FFMPEG, 0, 0, "");
+            return Err(Error::NoFfmpeg);
+        };
+        let Some(video) = self.shared.items.lock().unwrap().get(index).map(|it| it.media.path.clone()) else {
+            return Err(Error::Parse("no such video".into()));
+        };
+        let target = self.languages().swap_remove(0);
+        self.set_state(epoch, index, GENERATING, "");
+        self.status(ST_LISTENING, 0, 0, "");
+        let progress: Arc<dyn Fn(f32) + Send + Sync> = {
+            let c = self.clone();
+            let last = Arc::new(std::sync::atomic::AtomicI32::new(-1));
+            Arc::new(move |p: f32| {
+                let pct = (p * 100.0) as i32;
+                if last.swap(pct, Ordering::Relaxed) != pct {
+                    c.status(ST_LISTENING, pct, 0, "");
+                    c.progress(p);
+                }
+            })
+        };
+        let cancel = self.shared.cancel_flag();
+        let path = video.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let transcript = speech::transcribe(&model, &ffmpeg, &path, Some(&target), cancel, progress)?;
+            output::write_subtitle(&path, &transcript.language, "srt", &transcript.to_srt())
+        })
+        .await
+        .map_err(|e| Error::Parse(e.to_string()))?;
+        match result {
+            Ok(saved) => {
+                {
+                    let mut items = self.shared.items.lock().unwrap();
+                    if self.generation() == epoch
+                        && let Some(it) = items.get_mut(index)
+                    {
+                        it.media.existing = media::existing_subtitles(&video);
+                        it.subtitle = Some(saved.clone());
+                    }
+                }
+                self.set_state(epoch, index, GENERATED, file_name(&saved));
+                self.status(ST_GENERATED, 0, 0, file_name(&saved));
+                Ok(saved)
+            }
+            Err(e) => {
+                let stopped = matches!(e, Error::Cancelled);
+                self.set_state(epoch, index, FAILED, e.to_string());
+                self.status(if stopped { ST_STOPPED } else { ST_ERROR }, 0, 0, e.to_string());
+                Err(e)
+            }
+        }
+    }
+
+    /// Downloads the Whisper model chosen in the settings.
+    fn download_model(&self) {
+        let id = self.shared.settings.lock().unwrap().whisper_model.clone();
+        let (Some(model), Some(dir)) = (speech::model(&id), speech::models_dir()) else { return };
+        let c = self.clone();
+        self.run_busy(async move {
+            let cancel = c.shared.cancel_flag();
+            let mut last = -1;
+            let reporter = c.clone();
+            let mut progress = move |done: u64, total: Option<u64>| {
+                let pct = total.filter(|t| *t > 0).map_or(0, |t| (done * 100 / t) as i32);
+                if pct != last {
+                    last = pct;
+                    reporter.status(ST_MODEL_DOWNLOAD, pct, 0, "");
+                    reporter.progress(pct as f32 / 100.0);
+                }
+            };
+            match model.download(&dir, &cancel, &mut progress).await {
+                Ok(_) => c.status(ST_MODEL_READY, 0, 0, model.id),
+                Err(Error::Cancelled) => c.status(ST_STOPPED, 0, 0, ""),
+                Err(e) => c.status(ST_ERROR, 0, 0, e.to_string()),
+            }
+            let installed = model.installed().is_some();
+            let _ = c.ui.upgrade_in_event_loop(move |ui| ui.set_whisper_installed(installed));
+        });
     }
 
     /// Starts or stops watching the open folder, as the setting says.
@@ -1045,6 +1190,13 @@ fn rt_spawn_watch_worker(c: &Controller, rx: tokio::sync::mpsc::UnboundedReceive
 
 fn apply_settings(ui: &AppWindow, s: &Settings) {
     ui.set_watch(s.watch);
+    let models: Vec<slint::SharedString> =
+        speech::MODELS.iter().map(|m| format!("{} ({} MB)", m.id, m.size_mb).into()).collect();
+    ui.set_whisper_models(ModelRc::new(VecModel::from(models)));
+    let current = speech::MODELS.iter().position(|m| m.id == s.whisper_model).unwrap_or(1);
+    ui.set_whisper_model_index(current as i32);
+    ui.set_whisper_installed(speech::MODELS[current].installed().is_some());
+    ui.set_generate_missing(s.generate_when_missing);
     ui.set_languages(s.language_codes().join(", ").into());
     ui.set_recursive(s.recursive);
     ui.set_skip_existing(s.skip_existing);
@@ -1072,6 +1224,7 @@ fn read_settings(ui: &AppWindow, s: &mut Settings) {
     s.use_subdl = ui.get_use_subdl();
     s.use_addic7ed = ui.get_use_addic7ed();
     s.subdl_api_key = ui.get_subdl_api_key().trim().into();
+    s.generate_when_missing = ui.get_generate_missing();
 }
 
 /// Where ffmpeg was found, or "" when it was not.

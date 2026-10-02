@@ -31,7 +31,8 @@ export struct CandidateRow {
 export global Texts {
     // 0 waiting, 1 searching, 2 found (detail = count), 3 nothing found, 4 downloading,
     // 5 saved (detail = file name), 6 error (detail = message), 7 already has a wanted subtitle,
-    // 8 syncing, 9 synced (detail = "+1.20 s · 25 → 23.976 fps"), 10 sync failed (detail), 11 timing already fine
+    // 8 syncing, 9 synced (detail = "+1.20 s · 25 → 23.976 fps"), 10 sync failed (detail), 11 timing already fine,
+    // 12 generating from audio, 13 generated (detail = file)
     public pure function file-state(state: int, detail: string) -> string {
         if state == 1 { return @tr("Searching…"); }
         if state == 2 { return @tr("{} candidates", detail); }
@@ -44,11 +45,14 @@ export global Texts {
         if state == 9 { return @tr("Synced {}", detail); }
         if state == 10 { return @tr("Saved, sync failed: {}", detail); }
         if state == 11 { return @tr("Saved, timing fits"); }
+        if state == 12 { return @tr("Listening…"); }
+        if state == 13 { return @tr("Written from audio"); }
         return @tr("Waiting");
     }
 
     public pure function state-color(state: int) -> color {
-        if state == 1 || state == 4 || state == 8 { return #3b82f6; }
+        if state == 1 || state == 4 || state == 8 || state == 12 { return #3b82f6; }
+        if state == 13 { return #16a34a; }
         if state == 10 { return #d97706; }
         if state == 9 || state == 11 { return #16a34a; }
         if state == 2 { return #d97706; }
@@ -64,7 +68,8 @@ export global Texts {
     // 13 synced (a/b = speech match before/after %, detail = shift), 14 no ffmpeg,
     // 15 timing already fits (a = speech match %), 16 shifted (a = ms, detail = file), 17 nothing to sync,
     // 18 search cache cleared, 19 file-manager entry added, 20 removed, 21 watch: new video (detail),
-    // 22 previous subtitle restored (detail = file), 23 no previous subtitle
+    // 22 previous subtitle restored (detail = file), 23 no previous subtitle, 24 model download (a = %),
+    // 25 model ready (detail = id), 26 listening (a = %), 27 written from audio (detail = file), 28 no model
     public pure function status(kind: int, a: int, b: int, detail: string) -> string {
         if kind == 1 { return @tr("Scanning folder…"); }
         if kind == 2 { return @tr("Found {} videos.", a); }
@@ -90,6 +95,11 @@ export global Texts {
         if kind == 21 { return @tr("New video in the folder: {}", detail); }
         if kind == 22 { return @tr("Put back the previous {}.", detail); }
         if kind == 23 { return @tr("There is no previous subtitle to put back."); }
+        if kind == 24 { return @tr("Downloading the speech model… {}%", a); }
+        if kind == 25 { return @tr("Speech model {} is ready.", detail); }
+        if kind == 26 { return @tr("Listening to the audio… {}%", a); }
+        if kind == 27 { return @tr("Wrote {} from the audio.", detail); }
+        if kind == 28 { return @tr("No speech model yet: download one in Settings → Speech."); }
         return @tr("Ready.");
     }
 }
@@ -307,6 +317,13 @@ export component AppWindow inherits Window {
     callback toggle-watch(bool);
     callback search-as(int, string);
     callback restore(int);
+    callback generate(int);
+    callback download-model();
+    callback whisper-model-changed(int);
+    in property <[string]> whisper-models;
+    in-out property <int> whisper-model-index;
+    in property <bool> whisper-installed;
+    in-out property <bool> generate-missing;
     in-out property <bool> only-missing;
     in-out property <bool> watch;
     in property <bool> menu-installed;
@@ -473,6 +490,11 @@ export component AppWindow inherits Window {
                                 spacing: 8px;
                                 alignment: end;
                                 Button {
+                                    text: @tr("Write from audio");
+                                    enabled: !root.busy && root.selected-file >= 0;
+                                    clicked => { root.generate(root.selected-file); }
+                                }
+                                Button {
                                     text: @tr("Search again");
                                     enabled: !root.busy && root.selected-file >= 0;
                                     clicked => { root.search-file(root.selected-file); }
@@ -557,6 +579,34 @@ export component AppWindow inherits Window {
                                 LineEdit {
                                     text <=> root.ffmpeg-path;
                                     placeholder-text: @tr("ffmpeg path (optional)");
+                                }
+                            }
+                        }
+                        GroupBox {
+                            title: @tr("Speech (Whisper)");
+                            VerticalLayout {
+                                spacing: 8px;
+                                Text {
+                                    text: @tr("Writes a subtitle from the video's audio when no source has one. Runs on this computer; the model is downloaded once. Into English it can translate any language; other languages are written as spoken.");
+                                    wrap: word-wrap;
+                                }
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    ComboBox {
+                                        model: root.whisper-models;
+                                        current-index <=> root.whisper-model-index;
+                                        selected => { root.whisper-model-changed(self.current-index); }
+                                    }
+                                    Button {
+                                        text: root.whisper-installed ? @tr("Downloaded") : @tr("Download");
+                                        enabled: !root.whisper-installed && !root.busy;
+                                        clicked => { root.download-model(); }
+                                    }
+                                    Rectangle { horizontal-stretch: 1; }
+                                }
+                                CheckBox {
+                                    text: @tr("When no source has a subtitle, write one from the audio (slow)");
+                                    checked <=> root.generate-missing;
                                 }
                             }
                         }
