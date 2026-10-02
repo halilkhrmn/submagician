@@ -24,7 +24,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Linux build dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev libxkbcommon-x11-0 ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev libxkbcommon-x11-0 ffmpeg libarchive-tools
       - name: Format
         if: runner.os == 'Linux'
         run: cargo fmt --all --check
@@ -35,9 +35,12 @@ jobs:
         env:
           # Linux has ffmpeg with flite: the audio sync tests must run there, not be skipped.
           SUBMAGICIAN_REQUIRE_FFMPEG: ${{ runner.os == 'Linux' && '1' || '' }}
+          # Linux has bsdtar: the RAR/7z archive test must run there too.
+          SUBMAGICIAN_REQUIRE_BSDTAR: ${{ runner.os == 'Linux' && '1' || '' }}
       - name: Release build
         env:
           SUBMAGICIAN_OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
+          SUBMAGICIAN_SUBDL_API_KEY: ${{ secrets.SUBDL_API_KEY }}
         run: cargo build --release -p submagician
       - uses: actions/upload-artifact@v4
         with:

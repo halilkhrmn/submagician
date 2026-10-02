@@ -27,8 +27,9 @@ Work-log entries: newest on top, `### YYYY-MM-DD — short title`, then bullets 
 - `core` must not depend on Slint or any GUI crate; everything testable goes there.
 - Sources go behind `core::provider::Provider`. APIs where a site has one; scraping only where it
   has none, rate-limited and cached. Never put user credentials in code or logs.
-- Provider application keys come from build-time env (`SUBMAGICIAN_OPENSUBTITLES_API_KEY`) and
-  CI secrets; never commit them.
+- Provider application keys come from build-time env (`SUBMAGICIAN_OPENSUBTITLES_API_KEY`,
+  `SUBMAGICIAN_SUBDL_API_KEY`) and CI secrets (`OPENSUBTITLES_API_KEY`, `SUBDL_API_KEY`); never
+  commit them.
 - User-visible strings go through `@tr` in `.slint`; add the Turkish text to
   `crates/app/lang/tr/LC_MESSAGES/submagician.po` in the same change. Rust passes state codes,
   not sentences.
@@ -42,7 +43,8 @@ and `libxkbcommon-dev` (runtime: `libxkbcommon-x11-0` on X11). Syncing to audio 
 
 | What | Command |
 |---|---|
-| All tests | `cargo test --all` (audio tests need ffmpeg with flite; `SUBMAGICIAN_REQUIRE_FFMPEG=1` makes a skip fail) |
+| All tests | `cargo test --all` (audio tests need ffmpeg with flite, the 7z test bsdtar; `SUBMAGICIAN_REQUIRE_FFMPEG=1` / `SUBMAGICIAN_REQUIRE_BSDTAR=1` make a skip fail) |
+| Live provider tests | `SUBMAGICIAN_LIVE=1 cargo test -p submagician-core live_` |
 | Lint | `cargo clippy --all-targets -- -D warnings` and `cargo fmt --all --check` |
 | Run | `cargo run -p submagician` |
 | Run with an OpenSubtitles key | `SUBMAGICIAN_OPENSUBTITLES_API_KEY=… cargo run -p submagician` |
@@ -57,13 +59,15 @@ crates/core/   submagician-core, no GUI
   hash         OpenSubtitles moviehash
   name         hunch-based name parsing (title, year, S/E, source, group), folder fallback, tokens
   lang         language table (OpenSubtitles codes, ISO 639-2, encoding-detection TLD hint)
-  provider/    Provider trait, SearchQuery, Candidate; opensubtitles (REST)
+  provider/    Provider trait, SearchQuery, Candidate; opensubtitles (REST), subdl (JSON),
+               podnapisi (XML), gestdown (Addic7ed TV through api.gestdown.info)
+  cache        search results on disk (JSON per provider+query, 3 days / 12 h)
   score        candidate scoring and ranking, best pick per language order
   text         bytes → UTF-8 (BOM, UTF-16, chardetng, cp1254 for Turkish), format detection
   timing       SRT/VTT/ASS cue times: parse, change, render with the rest untouched
   audio        ffmpeg discovery, audio → 8 kHz PCM → WebRTC VAD → speech spans
   sync         frame-rate trial + alass alignment, speech overlap, apply-if-better; file helpers
-  archive      zip extraction (RAR/7z: Phase 3)
+  archive      zip extraction; RAR/7z through bsdtar / 7-Zip / unrar
   output       <stem>.<lang>.<ext> writer (UTF-8 BOM, CRLF, .bak once)
   engine       query → search all providers → rank → fetch → decode → save
 crates/app/    submagician (binary)

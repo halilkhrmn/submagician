@@ -8,7 +8,10 @@ use crate::Result;
 use crate::archive::SubtitleFile;
 use crate::name::ParsedName;
 
+pub mod gestdown;
 pub mod opensubtitles;
+pub mod podnapisi;
+pub mod subdl;
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
@@ -25,9 +28,10 @@ pub struct SearchQuery {
 }
 
 /// One subtitle a provider offers.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct Candidate {
-    pub provider: &'static str,
+    /// [`Provider::name`] of the provider that offers it.
+    pub provider: String,
     /// Provider-specific id used to download it.
     pub id: String,
     pub language: String,

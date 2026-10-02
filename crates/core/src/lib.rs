@@ -5,6 +5,7 @@
 
 pub mod archive;
 pub mod audio;
+pub mod cache;
 pub mod engine;
 pub mod error;
 pub mod hash;

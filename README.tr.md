@@ -16,7 +16,10 @@ kodlamasını düzeltir ve videonun yanına kaydeder. Windows ve Linux (macOS so
 - Zamanlama videonun sesinden düzeltilir: kayma, kare hızı (23.976 / 24 / 25) ve kesilmiş ya
   da eklenmiş sahneler. Altyazı zaten uyuyorsa dokunulmaz. Senkron olan başka bir altyazıya göre
   de senkronlayabilir ya da ±0,1 s / ±1 s kaydırabilirsin.
-- Sırada: daha fazla kaynak, Whisper.
+- Kaynaklar: OpenSubtitles, SubDL, Podnapisi ve Addic7ed (diziler, Gestdown üzerinden); her biri
+  kapatılabilir. Sonuçlar birkaç gün önbellekte tutulur. RAR ve 7z arşivleri bsdtar / 7-Zip ile
+  açılır (Windows 10+ içinde `tar.exe` hazır gelir).
+- Sırada: klasör izleme, gömülü altyazı izleri, Whisper.
 
 ## Kullanım
 

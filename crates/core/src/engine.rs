@@ -4,12 +4,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::archive::SubtitleFile;
+use crate::cache::SearchCache;
 use crate::media::MediaFile;
 use crate::provider::{Candidate, Provider, SearchQuery};
 use crate::{Error, Result, hash, name, output, score, text};
 
 pub struct Engine {
     providers: Vec<Arc<dyn Provider>>,
+    cache: Option<SearchCache>,
 }
 
 pub struct SearchOutcome {
@@ -29,7 +31,17 @@ pub struct Saved {
 
 impl Engine {
     pub fn new(providers: Vec<Arc<dyn Provider>>) -> Self {
-        Engine { providers }
+        Engine { providers, cache: None }
+    }
+
+    /// Keeps search results in `cache` (see [`SearchCache`]).
+    pub fn with_cache(mut self, cache: SearchCache) -> Self {
+        self.cache = Some(cache);
+        self
+    }
+
+    pub fn provider_names(&self) -> Vec<&'static str> {
+        self.providers.iter().map(|p| p.name()).collect()
     }
 
     /// Builds the query for `media`. Reads 128 KiB of the file for the hash, so call it off the
@@ -44,12 +56,23 @@ impl Engine {
         }
     }
 
-    pub async fn search(&self, query: &SearchQuery) -> SearchOutcome {
+    /// Asks every provider. Cached results are used unless `fresh`; new results are cached.
+    pub async fn search(&self, query: &SearchQuery, fresh: bool) -> SearchOutcome {
         let mut candidates = Vec::new();
         let mut errors = Vec::new();
         for provider in &self.providers {
+            let cached = if fresh { None } else { self.cache.as_ref().and_then(|c| c.get(provider.name(), query)) };
+            if let Some(found) = cached {
+                candidates.extend(found);
+                continue;
+            }
             match provider.search(query).await {
-                Ok(found) => candidates.extend(found),
+                Ok(found) => {
+                    if let Some(cache) = &self.cache {
+                        cache.put(provider.name(), query, &found);
+                    }
+                    candidates.extend(found);
+                }
                 Err(e) => {
                     log::warn!("{} search failed: {e}", provider.name());
                     errors.push(e);
@@ -117,13 +140,13 @@ mod tests {
             Box::pin(async move {
                 Ok(vec![
                     Candidate {
-                        provider: "Fake",
+                        provider: "Fake".into(),
                         id: "1".into(),
                         language: "tr".into(),
                         release,
                         ..Default::default()
                     },
-                    Candidate { provider: "Fake", id: "2".into(), language: "fr".into(), ..Default::default() },
+                    Candidate { provider: "Fake".into(), id: "2".into(), language: "fr".into(), ..Default::default() },
                 ])
             })
         }
@@ -168,7 +191,7 @@ mod tests {
         let query = Engine::query_for(&media, &langs);
         assert!(query.hash.is_none(), "tiny files have no hash");
 
-        let outcome = engine.search(&query).await;
+        let outcome = engine.search(&query, false).await;
         assert_eq!(outcome.errors.len(), 1);
         assert_eq!(outcome.candidates.len(), 1, "unwanted languages are dropped");
 
@@ -178,5 +201,48 @@ mod tests {
         let written = fs::read_to_string(&saved.path).unwrap();
         assert!(written.contains("Şişli'de ığdır"), "{written}");
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    struct Counting(std::sync::atomic::AtomicUsize);
+
+    impl Provider for Counting {
+        fn name(&self) -> &'static str {
+            "Counting"
+        }
+        fn search<'a>(&'a self, _: &'a SearchQuery) -> BoxFuture<'a, Result<Vec<Candidate>>> {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Box::pin(async {
+                Ok(vec![Candidate {
+                    provider: "Counting".into(),
+                    id: "1".into(),
+                    language: "tr".into(),
+                    ..Default::default()
+                }])
+            })
+        }
+        fn download<'a>(&'a self, _: &'a Candidate) -> BoxFuture<'a, Result<Downloaded>> {
+            Box::pin(async { Err(Error::Parse("no".into())) })
+        }
+    }
+
+    #[tokio::test]
+    async fn uses_the_cache_unless_fresh() {
+        let dir = std::env::temp_dir().join(format!("submagician-engine-cache-{}", std::process::id()));
+        let counting = Arc::new(Counting(Default::default()));
+        let engine = Engine::new(vec![counting.clone()]).with_cache(SearchCache::new(dir.clone()));
+        let file = "Film.2020.mkv";
+        let q = SearchQuery {
+            file_name: file.into(),
+            size: 1,
+            hash: None,
+            name: crate::name::parse(file),
+            languages: vec!["tr".into()],
+        };
+        assert_eq!(engine.search(&q, false).await.candidates.len(), 1);
+        assert_eq!(engine.search(&q, false).await.candidates.len(), 1);
+        assert_eq!(counting.0.load(std::sync::atomic::Ordering::SeqCst), 1, "second search came from the cache");
+        engine.search(&q, true).await;
+        assert_eq!(counting.0.load(std::sync::atomic::Ordering::SeqCst), 2, "fresh asks again");
+        let _ = fs::remove_dir_all(&dir);
     }
 }

@@ -265,7 +265,7 @@ impl SearchResponse {
             let [file] = a.files.as_slice() else { continue };
             let feature = a.feature_details.unwrap_or_default();
             out.push(Candidate {
-                provider: NAME,
+                provider: NAME.into(),
                 id: file.file_id.to_string(),
                 language: a.language.unwrap_or_default().to_lowercase(),
                 release: a.release.unwrap_or_default(),

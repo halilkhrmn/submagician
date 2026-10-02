@@ -9,10 +9,14 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
+use submagician_core::cache::SearchCache;
 use submagician_core::engine::{Engine, Saved};
 use submagician_core::media::{self, MediaFile};
+use submagician_core::provider::gestdown::Gestdown;
 use submagician_core::provider::opensubtitles::{self, Credentials, OpenSubtitles};
-use submagician_core::provider::{Candidate, SearchQuery};
+use submagician_core::provider::podnapisi::Podnapisi;
+use submagician_core::provider::subdl::{self, SubDl};
+use submagician_core::provider::{Candidate, Provider, SearchQuery};
 use submagician_core::sync::{self, Report, Span};
 use submagician_core::{Error, audio, score};
 use tokio::runtime::Handle;
@@ -52,6 +56,7 @@ const ST_NO_FFMPEG: i32 = 14;
 const ST_TIMING_OK: i32 = 15;
 const ST_SHIFTED: i32 = 16;
 const ST_NO_SUBTITLE: i32 = 17;
+const ST_CACHE_CLEARED: i32 = 18;
 
 /// Pause between videos in batch runs, to stay well inside provider rate limits.
 const BATCH_PAUSE: Duration = Duration::from_millis(250);
@@ -111,11 +116,30 @@ fn is_fatal(e: &Error) -> bool {
     matches!(e, Error::NotConfigured { .. } | Error::Auth { .. } | Error::Quota { .. })
 }
 
+/// The providers switched on in the settings (SubDL only when it has a key).
 fn build_engine(s: &Settings) -> Arc<Engine> {
-    let credentials =
-        Credentials { username: s.opensubtitles_username.clone(), password: s.opensubtitles_password.clone() };
-    let os = OpenSubtitles::new(Some(s.opensubtitles_api_key.clone()), Some(credentials));
-    Arc::new(Engine::new(vec![Arc::new(os)]))
+    let mut providers: Vec<Arc<dyn Provider>> = Vec::new();
+    if s.use_opensubtitles {
+        let credentials =
+            Credentials { username: s.opensubtitles_username.clone(), password: s.opensubtitles_password.clone() };
+        providers.push(Arc::new(OpenSubtitles::new(Some(s.opensubtitles_api_key.clone()), Some(credentials))));
+    }
+    if s.use_subdl
+        && let Some(subdl) = SubDl::new(Some(s.subdl_api_key.clone()))
+    {
+        providers.push(Arc::new(subdl));
+    }
+    if s.use_podnapisi {
+        providers.push(Arc::new(Podnapisi::new()));
+    }
+    if s.use_addic7ed {
+        providers.push(Arc::new(Gestdown::new()));
+    }
+    let mut engine = Engine::new(providers);
+    if let Some(dir) = Settings::search_cache_dir() {
+        engine = engine.with_cache(SearchCache::new(dir));
+    }
+    Arc::new(engine)
 }
 
 impl Controller {
@@ -125,6 +149,7 @@ impl Controller {
         ui.set_ffmpeg_found(ffmpeg_text(&settings).into());
         ui.set_version(env!("CARGO_PKG_VERSION").into());
         ui.set_has_builtin_key(opensubtitles::BUILT_IN_KEY.is_some());
+        ui.set_has_subdl_key(subdl::BUILT_IN_KEY.is_some());
 
         let c = Controller {
             shared: Arc::new(Shared {
@@ -191,6 +216,16 @@ impl Controller {
         ui.on_shift({
             let c = c.clone();
             move |i, ms| c.shift(i, ms)
+        });
+        ui.on_clear_cache({
+            let c = c.clone();
+            move || {
+                let cleared = Settings::search_cache_dir().map(|d| SearchCache::new(d).clear());
+                match cleared {
+                    Some(Err(e)) => c.status(ST_ERROR, 0, 0, e.to_string()),
+                    _ => c.status(ST_CACHE_CLEARED, 0, 0, ""),
+                }
+            }
         });
         ui.on_save_settings({
             let c = c.clone();
@@ -318,7 +353,7 @@ impl Controller {
         }
         let c = self.clone();
         self.run_busy(async move {
-            if let Err(e) = c.search_item(epoch, index).await {
+            if let Err(e) = c.search_item(epoch, index, force).await {
                 c.status(ST_ERROR, 0, 0, e.to_string());
             }
         });
@@ -382,7 +417,7 @@ impl Controller {
             }
             if !was_searched {
                 searched += 1;
-                match self.search_item(epoch, i).await {
+                match self.search_item(epoch, i, false).await {
                     Ok(count) if count > 0 => with_subs += 1,
                     Ok(_) => {}
                     Err(e) => return self.stop_with(e),
@@ -424,7 +459,8 @@ impl Controller {
 
     /// Searches every provider for file `index`. Returns how many candidates were found, or
     /// the error when nothing was found and the reason is one a batch cannot continue past.
-    async fn search_item(&self, epoch: u64, index: usize) -> Result<usize, Error> {
+    /// `fresh` skips cached results ("Search again").
+    async fn search_item(&self, epoch: u64, index: usize, fresh: bool) -> Result<usize, Error> {
         let languages = self.languages();
         let Some(media) = self.shared.items.lock().unwrap().get(index).map(|it| it.media.clone()) else {
             return Ok(0);
@@ -433,7 +469,7 @@ impl Controller {
         let query = tokio::task::spawn_blocking(move || Engine::query_for(&media, &languages))
             .await
             .map_err(|e| Error::Parse(e.to_string()))?;
-        let outcome = self.engine().search(&query).await;
+        let outcome = self.engine().search(&query, fresh).await;
         let count = outcome.candidates.len();
         let fatal = if count == 0 { outcome.errors.into_iter().find(is_fatal) } else { None };
         let (state, detail) = match (&fatal, count) {
@@ -720,6 +756,11 @@ fn apply_settings(ui: &AppWindow, s: &Settings) {
     ui.set_os_api_key(s.opensubtitles_api_key.clone().into());
     ui.set_auto_sync(s.auto_sync);
     ui.set_ffmpeg_path(s.ffmpeg_path.clone().into());
+    ui.set_use_opensubtitles(s.use_opensubtitles);
+    ui.set_use_subdl(s.use_subdl);
+    ui.set_use_podnapisi(s.use_podnapisi);
+    ui.set_use_addic7ed(s.use_addic7ed);
+    ui.set_subdl_api_key(s.subdl_api_key.clone().into());
 }
 
 fn read_settings(ui: &AppWindow, s: &mut Settings) {
@@ -737,6 +778,11 @@ fn read_settings(ui: &AppWindow, s: &mut Settings) {
     s.opensubtitles_api_key = ui.get_os_api_key().trim().into();
     s.auto_sync = ui.get_auto_sync();
     s.ffmpeg_path = ui.get_ffmpeg_path().trim().into();
+    s.use_opensubtitles = ui.get_use_opensubtitles();
+    s.use_subdl = ui.get_use_subdl();
+    s.use_podnapisi = ui.get_use_podnapisi();
+    s.use_addic7ed = ui.get_use_addic7ed();
+    s.subdl_api_key = ui.get_subdl_api_key().trim().into();
 }
 
 /// Where ffmpeg was found, or "" when it was not.
@@ -787,7 +833,7 @@ fn candidate_row(c: &Candidate) -> CandidateRow {
         score: c.score,
         language: c.language.clone().into(),
         release: c.release.clone().into(),
-        provider: c.provider.into(),
+        provider: c.provider.clone().into(),
         downloads: c.downloads.min(i32::MAX as u64) as i32,
         hash_match: c.hash_match,
         trusted: c.trusted,

@@ -16,6 +16,9 @@ msgstr "API anahtarı (gerekli: bu sürümde yerleşik anahtar yok)"
 msgid "About"
 msgstr "Hakkında"
 
+msgid "Addic7ed (TV series)"
+msgstr "Addic7ed (diziler)"
+
 msgid "Already has subtitle"
 msgstr "Altyazısı zaten var"
 
@@ -27,6 +30,9 @@ msgstr "Başlamak için video içeren bir klasör seç."
 
 msgid "Choose folder…"
 msgstr "Klasör seç…"
+
+msgid "Clear search cache"
+msgstr "Arama önbelleğini temizle"
 
 msgid "Done: {} saved, {} without subtitle."
 msgstr "Bitti: {} kaydedildi, {} videoya altyazı bulunamadı."
@@ -124,6 +130,9 @@ msgstr "Yeniden ara"
 msgid "Search all"
 msgstr "Hepsini ara"
 
+msgid "Search cache cleared."
+msgstr "Arama önbelleği temizlendi."
+
 msgid "Search finished: {} of {} videos have subtitles."
 msgstr "Arama bitti: {} / {} video için altyazı var."
 
@@ -145,17 +154,26 @@ msgstr "Ayarlar kaydedildi."
 msgid "Skip videos that already have a subtitle in the first language"
 msgstr "İlk dilde altyazısı olan videoları atla"
 
+msgid "Sources"
+msgstr "Kaynaklar"
+
 msgid "Stop"
 msgstr "Durdur"
 
 msgid "Stopped."
 msgstr "Durduruldu."
 
+msgid "SubDL API key (SubDL is skipped without one)"
+msgstr "SubDL API anahtarı (anahtar olmadan SubDL atlanır)"
+
+msgid "SubDL API key (optional, built-in key is used)"
+msgstr "SubDL API anahtarı (isteğe bağlı, yerleşik anahtar kullanılıyor)"
+
 msgid "Subtitles"
 msgstr "Altyazılar"
 
-msgid "Subtitles from OpenSubtitles.com."
-msgstr "Altyazılar OpenSubtitles.com'dan gelir."
+msgid "Subtitles from OpenSubtitles.com, SubDL, Podnapisi and Addic7ed (through Gestdown)."
+msgstr "Altyazılar OpenSubtitles.com, SubDL, Podnapisi ve Addic7ed'den (Gestdown üzerinden) gelir."
 
 msgid "Sync every downloaded subtitle to the video's audio"
 msgstr "İndirilen her altyazıyı videonun sesine göre senkronla"

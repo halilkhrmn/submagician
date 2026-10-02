@@ -6,13 +6,28 @@
   - [ ] Live test against OpenSubtitles with a real application key
 - [x] Phase 2 — Timing: ffmpeg, VAD + alass sync, frame rate, reference sync, manual offset
   - [ ] Check on real films (long soundtracks, music-heavy scenes) and tune VAD / thresholds
-- [ ] Phase 3 — More sources: SubDL, Podnapisi, Addic7ed, Turkish scrapers, RAR, cache
+- [x] Phase 3 — More sources: SubDL, Podnapisi, Addic7ed, RAR/7z, cache, source switches
+  - [ ] SubDL live test (needs the application key, `SUBDL_API_KEY` secret)
+  - [ ] Podnapisi live test (site unreachable from the dev environment)
+  - [ ] Turkish sites: decide on a hidden WebView (Türkçealtyazı and PlanetDP need JavaScript)
 - [ ] Phase 4 — Convenience: embedded tracks, watch folder, drag & drop, context menu, CLI
 - [ ] Phase 5 — Speech: Whisper generate / verify
 - [ ] Phase 6 — Packaging for Windows and Linux
 - [ ] Phase 7 — macOS
 
 ## Work log
+
+### 2026-10-02 — Phase 3 sources
+- Done: providers `gestdown` (Addic7ed TV), `subdl`, `podnapisi`; search cache (JSON files,
+  3 days / 12 h); RAR and 7z through bsdtar / 7-Zip / unrar; settings: sources on/off, SubDL key,
+  clear cache; "Search again" skips the cache; CI installs bsdtar and passes the SubDL secret.
+- Verified: Gestdown live (search + download, `SUBMAGICIAN_LIVE=1`), fixtures from its real
+  answers; SubDL's real no-key error; 7z archive unpacked through bsdtar; engine cache test; in
+  the app under Xvfb a real Addic7ed search for The.Office.US.S03E07.720p.WEB-DL listed 4
+  subtitles, ranked the 720p WEB-DL release first, and double-click saved `….en.srt`.
+- Found: Türkçealtyazı sits behind a Cloudflare JavaScript challenge; PlanetDP search needs
+  its JavaScript. Neither works over plain HTTP.
+- Open/next: SubDL and Podnapisi live tests; decision on a WebView for Turkish sites; Phase 4.
 
 ### 2026-10-02 — Phase 2 timing
 - Done: `timing` (SRT/VTT/ASS cue times, rewrite with everything else untouched); `audio`

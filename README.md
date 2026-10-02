@@ -16,7 +16,10 @@ encoding and saves it next to the video. Windows and Linux (macOS later).
 - Timing is fixed from the video's audio: offset, frame rate (23.976 / 24 / 25) and cut or added
   scenes. If the subtitle already fits, it is left alone. You can also sync to another subtitle
   that is in sync, or nudge it by ±0.1 s / ±1 s.
-- Coming next: more sources, Whisper.
+- Sources: OpenSubtitles, SubDL, Podnapisi and Addic7ed (TV series, through Gestdown); each can
+  be switched off. Results are cached for a few days. RAR and 7z archives are opened with
+  bsdtar / 7-Zip (Windows 10+ has `tar.exe` built in).
+- Coming next: watch folder, embedded subtitle tracks, Whisper.
 
 ## Use
 

@@ -58,7 +58,8 @@ export global Texts {
     // 9 one file saved (detail = name, a = downloads left or -1), 10 settings saved,
     // 11 search finished (a = videos with candidates, b = videos searched), 12 reading audio (a = %),
     // 13 synced (a/b = speech match before/after %, detail = shift), 14 no ffmpeg,
-    // 15 timing already fits (a = speech match %), 16 shifted (a = ms, detail = file), 17 nothing to sync
+    // 15 timing already fits (a = speech match %), 16 shifted (a = ms, detail = file), 17 nothing to sync,
+    // 18 search cache cleared
     public pure function status(kind: int, a: int, b: int, detail: string) -> string {
         if kind == 1 { return @tr("Scanning folder…"); }
         if kind == 2 { return @tr("Found {} videos.", a); }
@@ -78,6 +79,7 @@ export global Texts {
         if kind == 15 { return @tr("Timing already fits ({}% speech match); left unchanged.", a); }
         if kind == 16 { return @tr("Moved {} by {} ms.", detail, a); }
         if kind == 17 { return @tr("This video has no subtitle to sync yet."); }
+        if kind == 18 { return @tr("Search cache cleared."); }
         return @tr("Ready.");
     }
 }
@@ -271,6 +273,12 @@ export component AppWindow inherits Window {
     in-out property <string> ffmpeg-path;
     // Where ffmpeg was found, "" if not.
     in property <string> ffmpeg-found;
+    in-out property <bool> use-opensubtitles;
+    in-out property <bool> use-subdl;
+    in-out property <bool> use-podnapisi;
+    in-out property <bool> use-addic7ed;
+    in-out property <string> subdl-api-key;
+    in property <bool> has-subdl-key;
 
     callback choose-folder();
     callback rescan();
@@ -283,6 +291,7 @@ export component AppWindow inherits Window {
     callback sync-audio(int);
     callback sync-reference(int);
     callback shift(int, int);
+    callback clear-cache();
     callback save-settings();
 
     VerticalLayout {
@@ -483,6 +492,42 @@ export component AppWindow inherits Window {
                             }
                         }
                         GroupBox {
+                            title: @tr("Sources");
+                            VerticalLayout {
+                                spacing: 8px;
+                                HorizontalLayout {
+                                    spacing: 16px;
+                                    CheckBox {
+                                        text: "OpenSubtitles";
+                                        checked <=> root.use-opensubtitles;
+                                    }
+                                    CheckBox {
+                                        text: "SubDL";
+                                        checked <=> root.use-subdl;
+                                    }
+                                    CheckBox {
+                                        text: "Podnapisi";
+                                        checked <=> root.use-podnapisi;
+                                    }
+                                    CheckBox {
+                                        text: @tr("Addic7ed (TV series)");
+                                        checked <=> root.use-addic7ed;
+                                    }
+                                }
+                                LineEdit {
+                                    text <=> root.subdl-api-key;
+                                    placeholder-text: root.has-subdl-key ? @tr("SubDL API key (optional, built-in key is used)") : @tr("SubDL API key (SubDL is skipped without one)");
+                                }
+                                HorizontalLayout {
+                                    alignment: start;
+                                    Button {
+                                        text: @tr("Clear search cache");
+                                        clicked => { root.clear-cache(); }
+                                    }
+                                }
+                            }
+                        }
+                        GroupBox {
                             title: "OpenSubtitles.com";
                             VerticalLayout {
                                 spacing: 8px;
@@ -544,7 +589,7 @@ export component AppWindow inherits Window {
                         wrap: word-wrap;
                     }
                     Text {
-                        text: @tr("Subtitles from OpenSubtitles.com.");
+                        text: @tr("Subtitles from OpenSubtitles.com, SubDL, Podnapisi and Addic7ed (through Gestdown).");
                         opacity: 0.7;
                     }
                     AboutSlint {
