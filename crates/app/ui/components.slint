@@ -264,6 +264,22 @@ export component IconButton inherits Rectangle {
 }
 
 // One video in the library list.
+// A thin bar for a job's progress (0..1).
+export component ProgressBar inherits Rectangle {
+    in property <float> value;
+    height: 4px;
+    border-radius: 2px;
+    background: Theme.border;
+    Rectangle {
+        x: 0;
+        width: parent.width * clamp(root.value, 0, 1);
+        height: parent.height;
+        border-radius: 2px;
+        background: Palette.accent-background;
+        animate width { duration: 200ms; }
+    }
+}
+
 export component FileCard inherits Rectangle {
     in property <FileRow> item;
     in property <bool> selected;
@@ -313,10 +329,14 @@ export component FileCard inherits Rectangle {
                 font-weight: 600;
             }
             Text {
-                text: Texts.file-state(root.item.state, root.item.detail);
+                text: Texts.file-state(root.item.state, root.item.detail)
+                    + (root.item.progress >= 0 ? "  " + round(root.item.progress * 100) + "%" : "");
                 overflow: elide;
                 font-size: 12px;
                 color: root.tone == 0 ? Theme.muted : root.tone-color;
+            }
+            if root.item.progress >= 0: ProgressBar {
+                value: root.item.progress;
             }
         }
 

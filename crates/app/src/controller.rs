@@ -1,7 +1,6 @@
 //! Glue between the window and the core: UI callbacks start work on the tokio runtime, and the
 //! work reports back through `upgrade_in_event_loop`.
 
-use std::collections::HashMap;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -11,12 +10,13 @@ use std::time::Duration;
 use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
 use submagician_core::cache::SearchCache;
 use submagician_core::engine::{Engine, Saved};
+use submagician_core::jobs::{self, Done, Job};
 use submagician_core::media::{self, MediaFile};
 use submagician_core::provider::opensubtitles;
 use submagician_core::provider::subdl;
 use submagician_core::provider::{Candidate, SearchQuery};
 use submagician_core::settings::Settings;
-use submagician_core::sync::{self, Report, Span};
+use submagician_core::sync::{self, Report};
 use submagician_core::{Error, audio, integration, name, output, probe, score, speech, tools, watch};
 use tokio::runtime::Handle;
 
@@ -77,6 +77,10 @@ const ST_PLUGIN_REMOVED: i32 = 32;
 const ST_UPDATE_DOWNLOAD: i32 = 33;
 const ST_UP_TO_DATE: i32 = 34;
 const ST_REPORT_SAVED: i32 = 35;
+const ST_FROM_VIDEO: i32 = 36;
+const ST_FROM_VIDEO_DONE: i32 = 37;
+const ST_FROM_VIDEO_FITS: i32 = 38;
+const ST_NO_FFMPEG_TRACK: i32 = 39;
 
 /// Typed settings are saved once the typing pauses for this long.
 const SAVE_DELAY: Duration = Duration::from_millis(700);
@@ -109,6 +113,8 @@ struct Item {
     probed: bool,
     /// What to search for instead of what the file name says ("Search as").
     search_as: Option<String>,
+    /// 0.0..=1.0 while a long job runs on this video, else negative.
+    progress: f32,
 }
 
 impl Item {
@@ -123,6 +129,7 @@ impl Item {
             subtitle: None,
             probed: false,
             search_as: None,
+            progress: -1.0,
         }
     }
 }
@@ -135,8 +142,6 @@ struct Shared {
     /// Bumped whenever the file list is replaced, so late results of old work are dropped.
     generation: AtomicU64,
     cancel: Arc<AtomicBool>,
-    /// Speech spans per video, so syncing again does not decode the audio again.
-    speech: Mutex<HashMap<PathBuf, Arc<Vec<Span>>>>,
     /// Video to select once the folder scan that is running now has finished.
     select_after_scan: Mutex<Option<PathBuf>>,
     /// When videos were opened one by one (not a folder): the list to show instead of a scan.
@@ -196,7 +201,6 @@ impl Controller {
                 items: Mutex::new(Vec::new()),
                 generation: AtomicU64::new(0),
                 cancel: Arc::new(AtomicBool::new(false)),
-                speech: Mutex::new(HashMap::new()),
                 select_after_scan: Mutex::new(None),
                 opened_files: Mutex::new(None),
                 watcher: Mutex::new(None),
@@ -354,6 +358,10 @@ impl Controller {
                 }
                 c.file_selected(index, true);
             }
+        });
+        ui.global::<AppState>().on_use_embedded({
+            let c = c.clone();
+            move |i| c.use_embedded(i)
         });
         ui.global::<AppState>().on_restore({
             let c = c.clone();
@@ -852,25 +860,11 @@ impl Controller {
         let target = self.languages().swap_remove(0);
         self.set_state(epoch, index, GENERATING, "");
         self.status(ST_LISTENING, 0, 0, "");
-        let progress: Arc<dyn Fn(f32) + Send + Sync> = {
-            let c = self.clone();
-            let last = Arc::new(std::sync::atomic::AtomicI32::new(-1));
-            Arc::new(move |p: f32| {
-                let pct = (p * 100.0) as i32;
-                if last.swap(pct, Ordering::Relaxed) != pct {
-                    c.status(ST_LISTENING, pct, 0, "");
-                    c.progress(p);
-                }
-            })
-        };
-        let cancel = self.shared.cancel_flag();
-        let path = video.clone();
-        let result = tokio::task::spawn_blocking(move || {
-            let transcript = speech::transcribe(&model, &ffmpeg, &path, Some(&target), cancel, progress)?;
-            output::write_subtitle(&path, &transcript.language, "srt", &transcript.to_srt())
-        })
-        .await
-        .map_err(|e| Error::Parse(e.to_string()))?;
+        let job = Job::Generate { video: video.clone(), ffmpeg, model, language: target };
+        let result = self.run_job(epoch, index, job, ST_LISTENING).await.and_then(|done| match done {
+            Done::Written { path, .. } => Ok(path),
+            other => Err(Error::Other(format!("unexpected result {other:?}"))),
+        });
         match result {
             Ok(saved) => {
                 {
@@ -1157,21 +1151,32 @@ impl Controller {
         let what = if matches!(reference, Reference::Audio) { "audio" } else { "subtitle" };
         log::info!("sync {} to {what}", target.display());
         self.set_state(epoch, index, SYNCING, "");
-        let result = async {
-            let spans = match reference {
-                Reference::Audio => self.speech(&video).await?,
-                Reference::Subtitle(path) => Arc::new(
-                    tokio::task::spawn_blocking(move || sync::reference_from_file(&path))
-                        .await
-                        .map_err(|e| Error::Parse(e.to_string()))??,
-                ),
-            };
-            let path = target.clone();
-            tokio::task::spawn_blocking(move || sync::sync_file(&path, &spans))
+        let result = match reference {
+            Reference::Audio => match self.ffmpeg() {
+                None => Err(Error::NoFfmpeg),
+                Some(ffmpeg) => {
+                    self.status(ST_AUDIO, 0, 0, "");
+                    let job = Job::SyncAudio { subtitle: target.clone(), video: video.clone(), ffmpeg };
+                    match self.run_job(epoch, index, job, ST_AUDIO).await {
+                        Ok(Done::Synced { report, method }) => {
+                            log::info!("synced by {method:?}");
+                            Ok(report)
+                        }
+                        Ok(other) => Err(Error::Other(format!("unexpected result {other:?}"))),
+                        Err(e) => Err(e),
+                    }
+                }
+            },
+            Reference::Subtitle(path) => {
+                let target = target.clone();
+                tokio::task::spawn_blocking(move || {
+                    let spans = sync::reference_from_file(&path)?;
+                    sync::sync_file(&target, &spans)
+                })
                 .await
                 .map_err(|e| Error::Parse(e.to_string()))?
-        }
-        .await;
+            }
+        };
         let pct = |v: f32| (v * 100.0).round() as i32;
         log::info!("sync result: {result:?}");
         match &result {
@@ -1200,29 +1205,101 @@ impl Controller {
         result
     }
 
-    /// Speech spans of `video`, from the cache or decoded with ffmpeg.
-    async fn speech(&self, video: &Path) -> Result<Arc<Vec<Span>>, Error> {
-        if let Some(spans) = self.shared.speech.lock().unwrap().get(video) {
-            return Ok(spans.clone());
-        }
-        let ffmpeg = self.ffmpeg().ok_or(Error::NoFfmpeg)?;
-        let (c, path) = (self.clone(), video.to_path_buf());
-        self.status(ST_AUDIO, 0, 0, "");
-        let spans = tokio::task::spawn_blocking(move || {
-            let mut last = -1;
-            audio::extract_speech(&ffmpeg, &path, &c.shared.cancel, &mut |p| {
+    /// Runs a heavy job for video `index` in the worker process (in this process when the
+    /// command-line tool is missing), showing its progress on the video and in the status bar
+    /// as status `kind`. Stop ends it.
+    async fn run_job(&self, epoch: u64, index: usize, job: Job, kind: i32) -> Result<Done, Error> {
+        let progress: jobs::Progress = {
+            let c = self.clone();
+            let last = Arc::new(std::sync::atomic::AtomicI32::new(-1));
+            Arc::new(move |p: f32| {
                 let pct = (p * 100.0) as i32;
-                if pct != last {
-                    last = pct;
-                    c.status(ST_AUDIO, pct, 0, "");
+                if last.swap(pct, Ordering::Relaxed) != pct {
+                    c.status(kind, pct, 0, "");
+                    c.progress(p);
+                    c.set_progress(epoch, index, p);
                 }
             })
-        })
-        .await
-        .map_err(|e| Error::Parse(e.to_string()))??;
-        let spans = Arc::new(spans);
-        self.shared.speech.lock().unwrap().insert(video.to_path_buf(), spans.clone());
-        Ok(spans)
+        };
+        self.set_progress(epoch, index, 0.0);
+        let cancel = self.shared.cancel_flag();
+        let result = tokio::task::spawn_blocking(move || jobs::run_isolated(&job, cancel, progress))
+            .await
+            .map_err(|e| Error::Parse(e.to_string()))?;
+        self.set_progress(epoch, index, -1.0);
+        result
+    }
+
+    fn set_progress(&self, epoch: u64, index: usize, value: f32) {
+        {
+            let mut items = self.shared.items.lock().unwrap();
+            if self.generation() != epoch {
+                return;
+            }
+            let Some(it) = items.get_mut(index) else { return };
+            it.progress = value;
+        }
+        self.push_row(epoch, index);
+    }
+
+    /// Takes the subtitle in a wanted language out of video `index`, saves it next to the
+    /// video and syncs it to the audio.
+    fn use_embedded(&self, index: i32) {
+        let Ok(index) = usize::try_from(index) else { return };
+        let epoch = self.generation();
+        let c = self.clone();
+        self.run_busy(async move {
+            let configured = PathBuf::from(&c.shared.settings.lock().unwrap().ffmpeg_path);
+            let (Some(ffmpeg), Some(ffprobe)) =
+                (audio::find_ffmpeg(Some(&configured)), audio::find_ffprobe(Some(&configured)))
+            else {
+                c.status(ST_NO_FFMPEG_TRACK, 0, 0, "");
+                return;
+            };
+            let Some(video) = c.shared.items.lock().unwrap().get(index).map(|it| it.media.path.clone()) else { return };
+            c.set_state(epoch, index, SYNCING, "");
+            c.status(ST_FROM_VIDEO, 0, 0, "");
+            let job = Job::Embedded { video: video.clone(), ffmpeg, ffprobe, languages: c.languages() };
+            match c.run_job(epoch, index, job, ST_FROM_VIDEO).await {
+                Ok(Done::Extracted { path, report, sync_error, .. }) => {
+                    log::info!("took {} out of the video: {report:?} {sync_error:?}", path.display());
+                    {
+                        let mut items = c.shared.items.lock().unwrap();
+                        if c.generation() == epoch
+                            && let Some(it) = items.get_mut(index)
+                        {
+                            it.media.existing = media::existing_subtitles(&video);
+                            it.subtitle = Some(path.clone());
+                        }
+                    }
+                    let pct = |v: f32| (v * 100.0).round() as i32;
+                    match (report, sync_error) {
+                        (Some(r), _) if r.applied => {
+                            c.set_state(epoch, index, SYNCED, r.summary());
+                            c.status(ST_FROM_VIDEO_DONE, pct(r.overlap_before), pct(r.overlap_after), file_name(&path));
+                        }
+                        (Some(r), _) => {
+                            c.set_state(epoch, index, TIMING_OK, "");
+                            c.status(ST_FROM_VIDEO_FITS, pct(r.overlap_before), 0, file_name(&path));
+                        }
+                        (None, e) => {
+                            let e = e.unwrap_or_default();
+                            c.set_state(epoch, index, SYNC_FAILED, e.clone());
+                            c.status(ST_ERROR, 0, 0, e);
+                        }
+                    }
+                }
+                Ok(other) => c.status(ST_ERROR, 0, 0, format!("unexpected result {other:?}")),
+                Err(Error::Cancelled) => {
+                    c.set_state(epoch, index, WAITING, "");
+                    c.status(ST_STOPPED, 0, 0, "");
+                }
+                Err(e) => {
+                    c.set_state(epoch, index, FAILED, e.to_string());
+                    c.status(ST_ERROR, 0, 0, e.to_string());
+                }
+            }
+        });
     }
 
     fn set_state(&self, epoch: u64, index: usize, state: i32, detail: impl Into<String>) {
@@ -1380,6 +1457,7 @@ fn file_row(root: &Path, it: &Item, first_language: &str) -> FileRow {
         has_wanted: it.media.has_language(first_language),
         state: it.state,
         detail: it.detail.clone().into(),
+        progress: it.progress,
     }
 }
 

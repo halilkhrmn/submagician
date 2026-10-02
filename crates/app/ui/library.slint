@@ -1,7 +1,7 @@
 import { Button, LineEdit, CheckBox, ListView, Palette } from "std-widgets.slint";
 import { Theme, Icons } from "theme.slint";
 import { AppState, Texts } from "state.slint";
-import { Card, EmptyState, PageHeader, FileCard, CandidateCard, Glyph, Badge, Note } from "components.slint";
+import { Card, EmptyState, PageHeader, FileCard, CandidateCard, Glyph, Badge, Note, ProgressBar } from "components.slint";
 
 // The selected video: what it has, the subtitles the sources offer, and its timing.
 component DetailsPanel inherits VerticalLayout {
@@ -34,14 +34,16 @@ component DetailsPanel inherits VerticalLayout {
             color: Theme.muted;
             overflow: elide;
         }
-        HorizontalLayout {
-            spacing: 6px;
-            alignment: start;
-            Badge {
-                text: Texts.file-state(AppState.files[index].state, AppState.files[index].detail);
-                tone: Theme.tone-color(Texts.file-tone(AppState.files[index].state));
-                max-width: 360px;
-            }
+        Text {
+            text: Texts.file-state(AppState.files[index].state, AppState.files[index].detail)
+                + (AppState.files[index].progress >= 0 ? "  " + round(AppState.files[index].progress * 100) + "%" : "");
+            color: Theme.tone-color(Texts.file-tone(AppState.files[index].state));
+            font-size: 12px;
+            font-weight: 600;
+            wrap: word-wrap;
+        }
+        if AppState.files[index].progress >= 0: ProgressBar {
+            value: AppState.files[index].progress;
         }
         Text {
             text: (AppState.files[index].existing == "" ? @tr("No subtitle next to it") : @tr("Next to it: {}", AppState.files[index].existing))
@@ -54,16 +56,23 @@ component DetailsPanel inherits VerticalLayout {
             spacing: 8px;
             alignment: start;
             Button {
-                text: @tr("Play");
                 icon: Icons.play;
                 colorize-icon: true;
+                accessible-label: @tr("Play");
                 clicked => { AppState.play(index); }
             }
             Button {
-                text: @tr("Show in folder");
                 icon: Icons.folder;
                 colorize-icon: true;
+                accessible-label: @tr("Show in folder");
                 clicked => { AppState.reveal(index); }
+            }
+            if AppState.files[index].embedded != "": Button {
+                text: @tr("Use the subtitle inside");
+                icon: Icons.sync;
+                colorize-icon: true;
+                enabled: !AppState.busy;
+                clicked => { AppState.use-embedded(index); }
             }
         }
     }

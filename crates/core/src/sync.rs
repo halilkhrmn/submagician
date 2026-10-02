@@ -20,9 +20,9 @@ const SPLIT_PENALTY: f64 = 7.0;
 /// Speed optimization passed to alass (higher is faster, less exact).
 const SPEED: f64 = 1.0;
 /// A sync must raise the speech overlap by this much to be kept.
-const MIN_GAIN: f32 = 0.02;
+pub(crate) const MIN_GAIN: f32 = 0.02;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Report {
     /// Shift of the first line, in milliseconds.
     pub offset_ms: i64,
@@ -101,12 +101,92 @@ pub fn align(doc: &mut Document, reference: &[Span]) -> Report {
     Report { offset_ms, ratio, splits, overlap_before: before, overlap_after: after, applied }
 }
 
+/// What the quick look at a few parts of the audio found.
+#[derive(Debug, Clone, PartialEq)]
+pub struct QuickFit {
+    pub ratio: f64,
+    pub offset_ms: i64,
+    /// Speech overlap inside the windows, before and after.
+    pub overlap_before: f32,
+    pub overlap_after: f32,
+    /// Every window with enough lines fits the one shift (no cut or added scenes there).
+    pub consistent: bool,
+    /// Subtitle lines that landed inside the windows after the shift.
+    pub cues_inside: usize,
+}
+
+/// Windows with fewer lines than this say nothing about the shift.
+const MIN_WINDOW_CUES: usize = 4;
+/// A window is consistent when the global shift reaches this share of its own best overlap.
+const WINDOW_AGREEMENT: f32 = 0.85;
+
+/// One frame-rate ratio and shift for the whole subtitle, from speech found only inside
+/// `windows` (absolute ranges `(start, length)`; `speech[i]` belongs to `windows[i]`).
+/// Overlaps are measured inside the windows only.
+pub fn quick_fit(doc: &Document, windows: &[(i64, i64)], speech: &[Vec<Span>]) -> QuickFit {
+    let original: Vec<Span> = doc.cues.iter().map(|c| (c.start, c.end.max(c.start + 1))).collect();
+    let all_speech = merge(speech.concat());
+    let ref_spans: Vec<TimeSpan> = all_speech.iter().map(|&(s, e)| span(s, e)).collect();
+    let areas: Vec<Span> = windows.iter().map(|&(s, l)| (s, s + l)).collect();
+    let before = windowed_overlap(&original, &all_speech, &areas);
+
+    // The ratio and shift with the most subtitle time on speech; speech exists only inside the
+    // windows, so this is the best fit there.
+    let (ratio, offset, _) = RATIOS
+        .iter()
+        .copied()
+        .map(|r| {
+            let scaled: Vec<TimeSpan> = original.iter().map(|&(s, e)| scaled_span(s, e, r)).collect();
+            let (delta, score) =
+                alass_core::align_nosplit(&ref_spans, &scaled, alass_core::overlap_scoring, NoProgressHandler);
+            (r, delta.as_i64(), score)
+        })
+        .fold((1.0, 0, f64::MIN), |best, cur| if cur.2 > best.2 * 1.01 { cur } else { best });
+    let moved: Vec<Span> =
+        original.iter().map(|&(s, e)| (scale(s, ratio) + offset, scale(e, ratio) + offset)).collect();
+    let after = windowed_overlap(&moved, &all_speech, &areas);
+
+    // Each window on its own: does the global shift fit it about as well as its own best one?
+    let scaled: Vec<Span> = original.iter().map(|&(s, e)| (scale(s, ratio), scale(e, ratio))).collect();
+    let consistent = areas.iter().zip(speech).all(|(&area, window_speech)| {
+        let inside = moved.iter().filter(|c| c.0 >= area.0 && c.1 <= area.1).count();
+        if inside < MIN_WINDOW_CUES || window_speech.is_empty() {
+            return true;
+        }
+        let here = merge(window_speech.clone());
+        let at_global = windowed_overlap(&moved, &here, &[area]);
+        let refs: Vec<TimeSpan> = here.iter().map(|&(s, e)| span(s, e)).collect();
+        let subs: Vec<TimeSpan> = scaled.iter().map(|&(s, e)| span(s, e.max(s + 1))).collect();
+        let (local, _) = alass_core::align_nosplit(&refs, &subs, alass_core::overlap_scoring, NoProgressHandler);
+        let local_moved: Vec<Span> = scaled.iter().map(|&(s, e)| (s + local.as_i64(), e + local.as_i64())).collect();
+        let best_here = windowed_overlap(&local_moved, &here, &[area]);
+        at_global >= best_here * WINDOW_AGREEMENT
+    });
+    let cues_inside = moved.iter().filter(|c| areas.iter().any(|a| c.0 < a.1 && c.1 > a.0)).count();
+    QuickFit { ratio, offset_ms: offset, overlap_before: before, overlap_after: after, consistent, cues_inside }
+}
+
+/// Applies a [`QuickFit`] to `doc`.
+pub fn apply_quick(doc: &mut Document, fit: &QuickFit) {
+    doc.map_times(|_, t| scale(t, fit.ratio) + fit.offset_ms);
+}
+
+/// Like [`overlap`], counting only the parts of `spans` inside `areas`.
+fn windowed_overlap(spans: &[Span], reference: &[Span], areas: &[Span]) -> f32 {
+    let clipped: Vec<Span> = spans
+        .iter()
+        .flat_map(|&(s, e)| areas.iter().map(move |&(a, b)| (s.max(a), e.min(b))))
+        .filter(|(s, e)| e > s)
+        .collect();
+    overlap(&clipped, reference)
+}
+
 /// The cue spans of an in-sync subtitle, for use as a reference.
 pub fn reference_from(doc: &Document) -> Vec<Span> {
     doc.cues.iter().filter(|c| c.end > c.start).map(|c| (c.start, c.end)).collect()
 }
 
-fn load(path: &Path) -> Result<Document> {
+pub(crate) fn load(path: &Path) -> Result<Document> {
     let bytes = std::fs::read(path)?;
     Document::parse(&text::decode(&bytes, media::language_of(path)).text)
 }
@@ -267,6 +347,47 @@ mod tests {
         let report = align(&mut doc, &speech);
         assert!(!report.applied);
         assert_eq!(doc.render(), truth.render());
+    }
+
+    /// The speech of `truth` inside a few windows, as the quick look would find it.
+    fn sampled(truth: &Document, windows: &[(i64, i64)]) -> Vec<Vec<Span>> {
+        let speech = reference_from(truth);
+        windows
+            .iter()
+            .map(|&(s, l)| speech.iter().map(|&(a, b)| (a.max(s), b.min(s + l))).filter(|(a, b)| b > a).collect())
+            .collect()
+    }
+
+    const WINDOWS: [(i64, i64); 5] =
+        [(60_000, 45_000), (200_000, 45_000), (340_000, 45_000), (480_000, 45_000), (620_000, 45_000)];
+
+    #[test]
+    fn quick_fit_finds_offset_and_frame_rate() {
+        let truth = Document::parse(&sample_srt(200)).unwrap();
+        let speech = sampled(&truth, &WINDOWS);
+        let mut doc = truth.clone();
+        doc.shift(-4_200);
+        let fit = quick_fit(&doc, &WINDOWS, &speech);
+        assert!(fit.consistent && (fit.offset_ms - 4_200).abs() <= 30 && fit.ratio == 1.0, "{fit:?}");
+        assert!(fit.overlap_after > 0.95 && fit.overlap_before < 0.8, "{fit:?}");
+
+        let mut doc = truth.clone();
+        doc.map_times(|_, t| (t as f64 * 23.976 / 25.0).round() as i64 + 1_000);
+        let fit = quick_fit(&doc, &WINDOWS, &speech);
+        assert!(fit.consistent && (fit.ratio - 25.0 / 23.976).abs() < 1e-9, "{fit:?}");
+        apply_quick(&mut doc, &fit);
+        let err = doc.cues.iter().zip(&truth.cues).map(|(a, b)| (a.start - b.start).abs()).max().unwrap();
+        assert!(err <= 80, "max error {err} ms");
+    }
+
+    #[test]
+    fn quick_fit_notices_a_cut_scene() {
+        let truth = Document::parse(&sample_srt(200)).unwrap();
+        let speech = sampled(&truth, &WINDOWS);
+        let mut doc = truth.clone();
+        doc.map_times(|_, t| if t >= 300_000 { t + 20_000 } else { t });
+        let fit = quick_fit(&doc, &WINDOWS, &speech);
+        assert!(!fit.consistent, "a split must send it to the full pass: {fit:?}");
     }
 
     #[test]

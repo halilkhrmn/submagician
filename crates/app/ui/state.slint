@@ -13,6 +13,8 @@ export struct FileRow {
     // See Texts.file-state.
     state: int,
     detail: string,
+    // 0..1 while a long job runs on it, else negative.
+    progress: float,
 }
 
 export struct CandidateRow {
@@ -82,7 +84,9 @@ export global Texts {
     // 25 model ready (detail = id), 26 listening (a = %), 27 written from audio (detail = file), 28 no model
     // 29 ffmpeg download (a = %), 30 ffmpeg ready, 31 plugin installed (detail = player),
     // 32 plugin removed (detail = player), 33 update download (a = %), 34 up to date,
-    // 35 report saved (detail = path)
+    // 35 report saved (detail = path), 36 taking the subtitle out of the video (a = %),
+    // 37 taken out and synced (detail = file, a/b = speech match before/after %),
+    // 38 taken out, timing fits (detail = file, a = speech match %), 39 no ffmpeg/ffprobe for tracks
     public pure function status(kind: int, a: int, b: int, detail: string) -> string {
         if kind == 1 { return @tr("Scanning folder…"); }
         if kind == 2 { return @tr("Found {} videos.", a); }
@@ -120,15 +124,19 @@ export global Texts {
         if kind == 33 { return @tr("Downloading the update… {}%", a); }
         if kind == 34 { return @tr("SubMagician is up to date."); }
         if kind == 35 { return @tr("Report saved: {}", detail); }
+        if kind == 36 { return @tr("Taking the subtitle out of the video and syncing it… {}%", a); }
+        if kind == 37 { return @tr("Took {} out of the video and synced it. Speech match {}% → {}%.", detail, a, b); }
+        if kind == 38 { return @tr("Took {} out of the video; its timing already fits ({}% speech match).", detail, a); }
+        if kind == 39 { return @tr("ffmpeg and ffprobe are needed to read the subtitles inside videos. Settings → Timing can get them."); }
         return @tr("Ready.");
     }
 
     // Tone of a status message.
     public pure function status-tone(kind: int) -> int {
-        if kind == 1 || kind == 3 || kind == 4 || kind == 12 || kind == 24 || kind == 26 || kind == 29 || kind == 33 { return 1; }
+        if kind == 1 || kind == 3 || kind == 4 || kind == 12 || kind == 24 || kind == 26 || kind == 29 || kind == 33 || kind == 36 { return 1; }
         if kind == 6 || kind == 8 { return 4; }
-        if kind == 14 || kind == 17 || kind == 23 || kind == 28 { return 3; }
-        if kind == 5 || kind == 9 || kind == 13 || kind == 15 || kind == 22 || kind == 25 || kind == 27 || kind == 30 || kind == 31 || kind == 34 { return 2; }
+        if kind == 14 || kind == 17 || kind == 23 || kind == 28 || kind == 39 { return 3; }
+        if kind == 5 || kind == 9 || kind == 13 || kind == 15 || kind == 22 || kind == 25 || kind == 27 || kind == 30 || kind == 31 || kind == 34 || kind == 37 || kind == 38 { return 2; }
         return 0;
     }
 }
@@ -173,6 +181,8 @@ export global AppState {
     callback toggle-watch(bool);
     callback search-as(int, string);
     callback restore(int);
+    // Take the subtitle inside the video out as a file and sync it.
+    callback use-embedded(int);
     callback generate(int);
     callback play(int);
     callback reveal(int);

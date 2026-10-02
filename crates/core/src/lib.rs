@@ -6,11 +6,13 @@
 pub mod applog;
 pub mod archive;
 pub mod audio;
+pub mod autosync;
 pub mod cache;
 pub mod engine;
 pub mod error;
 pub mod hash;
 pub mod integration;
+pub mod jobs;
 pub mod lang;
 pub mod media;
 pub mod name;
