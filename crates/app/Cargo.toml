@@ -1,5 +1,7 @@
 [package]
 name = "submagician"
+description = "Finds subtitles for your videos, fixes their encoding and timing, and saves them next to the video"
+homepage = "https://github.com/halilkhrmn/submagician"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -18,7 +20,30 @@ tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "sync", "
 
 [build-dependencies]
 slint-build = "1.18.1"
+winresource = "0.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 wayland-client = "0.31"
 wayland-backend = { version = "0.3", features = ["client_system"] }
+
+[package.metadata.deb]
+name = "submagician"
+maintainer = "Halil Kahraman <halilkahraman@yandex.com>"
+copyright = "SubMagician contributors"
+license-file = ["../../LICENSE", "0"]
+section = "video"
+priority = "optional"
+extended-description = """\
+Finds subtitles for a folder of videos on OpenSubtitles, SubDL and Addic7ed, picks the one made \
+for each file, fixes its text encoding, syncs it to the audio and saves it next to the video. \
+Writes one from the audio with Whisper when no source has it. Comes with a command-line tool and \
+plugins for mpv and VLC."""
+depends = "$auto, libxkbcommon-x11-0"
+recommends = "ffmpeg"
+assets = [
+    ["target/release/submagician", "usr/bin/", "755"],
+    ["target/release/submagician-cli", "usr/bin/", "755"],
+    ["../../packaging/linux/submagician.desktop", "usr/share/applications/", "644"],
+    ["assets/icon.png", "usr/share/icons/hicolor/256x256/apps/submagician.png", "644"],
+    ["assets/icon.svg", "usr/share/icons/hicolor/scalable/apps/submagician.svg", "644"],
+]

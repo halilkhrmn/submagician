@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=SubMagician
+GenericName=Subtitle finder
+Comment=Find, fix and sync subtitles for your videos
+Exec=submagician %f
+Icon=submagician
+Terminal=false
+Categories=AudioVideo;Video;Utility;
+MimeType=inode/directory;video/x-matroska;video/mp4;video/x-msvideo;video/quicktime;video/webm;video/mpeg;video/x-ms-wmv;video/mp2t;video/x-flv;video/3gpp;
+Keywords=subtitles;srt;captions;sync;
