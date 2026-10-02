@@ -1,0 +1,514 @@
+import { Button, LineEdit, CheckBox, TabWidget, GroupBox, ListView, ProgressIndicator, ComboBox, AboutSlint, Palette, VerticalBox, HorizontalBox, ScrollView } from "std-widgets.slint";
+
+export struct FileRow {
+    name: string,
+    folder: string,
+    // Languages of the subtitles already next to the video ("tr, en").
+    existing: string,
+    // See Texts.file-state.
+    state: int,
+    detail: string,
+}
+
+export struct CandidateRow {
+    score: int,
+    language: string,
+    release: string,
+    provider: string,
+    downloads: int,
+    hash-match: bool,
+    trusted: bool,
+    machine: bool,
+    hearing-impaired: bool,
+    fps: string,
+}
+
+// Texts built from state codes, so every visible string goes through @tr.
+export global Texts {
+    // 0 waiting, 1 searching, 2 found (detail = count), 3 nothing found, 4 downloading,
+    // 5 saved (detail = file name), 6 error (detail = message), 7 already has a wanted subtitle
+    public pure function file-state(state: int, detail: string) -> string {
+        if state == 1 { return @tr("Searching…"); }
+        if state == 2 { return @tr("{} candidates", detail); }
+        if state == 3 { return @tr("Nothing found"); }
+        if state == 4 { return @tr("Downloading…"); }
+        if state == 5 { return @tr("Saved"); }
+        if state == 6 { return @tr("Error: {}", detail); }
+        if state == 7 { return @tr("Already has subtitle"); }
+        return @tr("Waiting");
+    }
+
+    public pure function state-color(state: int) -> color {
+        if state == 1 || state == 4 { return #3b82f6; }
+        if state == 2 { return #d97706; }
+        if state == 3 || state == 6 { return #dc2626; }
+        if state == 5 || state == 7 { return #16a34a; }
+        return #9ca3af;
+    }
+
+    // 0 ready, 1 scanning, 2 scanned (a = videos), 3 searching (a/b), 4 downloading (a/b),
+    // 5 finished (a = saved, b = failed), 6 error (detail), 7 stopped, 8 download limit (detail),
+    // 9 one file saved (detail = name, a = downloads left or -1), 10 settings saved,
+    // 11 search finished (a = videos with candidates, b = videos searched)
+    public pure function status(kind: int, a: int, b: int, detail: string) -> string {
+        if kind == 1 { return @tr("Scanning folder…"); }
+        if kind == 2 { return @tr("Found {} videos.", a); }
+        if kind == 3 { return @tr("Searching {} / {}…", a, b); }
+        if kind == 4 { return @tr("Downloading {} / {}…", a, b); }
+        if kind == 5 { return @tr("Done: {} saved, {} without subtitle.", a, b); }
+        if kind == 6 { return @tr("Error: {}", detail); }
+        if kind == 7 { return @tr("Stopped."); }
+        if kind == 8 { return @tr("Download limit reached: {}", detail); }
+        if kind == 9 && a >= 0 { return @tr("Saved {} ({} downloads left today).", detail, a); }
+        if kind == 9 { return @tr("Saved {}.", detail); }
+        if kind == 10 { return @tr("Settings saved."); }
+        if kind == 11 { return @tr("Search finished: {} of {} videos have subtitles.", a, b); }
+        return @tr("Ready.");
+    }
+}
+
+component FileItem inherits Rectangle {
+    in property <FileRow> item;
+    in property <bool> selected;
+    in property <bool> even;
+    callback clicked();
+
+    height: 46px;
+    background: selected ? Palette.selection-background : (even ? transparent : Palette.alternate-background);
+
+    TouchArea {
+        clicked => { root.clicked(); }
+    }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 10px;
+
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 10px;
+                height: 10px;
+                border-radius: 5px;
+                background: Texts.state-color(root.item.state);
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text {
+                text: root.item.name;
+                overflow: elide;
+                color: root.selected ? Palette.selection-foreground : Palette.foreground;
+            }
+            Text {
+                text: root.item.folder;
+                overflow: elide;
+                font-size: 11px;
+                opacity: 0.6;
+                color: root.selected ? Palette.selection-foreground : Palette.foreground;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            width: 150px;
+            Text {
+                text: Texts.file-state(root.item.state, root.item.detail);
+                overflow: elide;
+                horizontal-alignment: right;
+                color: root.selected ? Palette.selection-foreground : Palette.foreground;
+            }
+            Text {
+                text: root.item.existing == "" ? "" : @tr("Has: {}", root.item.existing);
+                overflow: elide;
+                font-size: 11px;
+                opacity: 0.6;
+                horizontal-alignment: right;
+                color: root.selected ? Palette.selection-foreground : Palette.foreground;
+            }
+        }
+    }
+}
+
+component CandidateItem inherits Rectangle {
+    in property <CandidateRow> item;
+    in property <bool> selected;
+    in property <bool> even;
+    callback clicked();
+    callback double-clicked();
+
+    height: 50px;
+    background: selected ? Palette.selection-background : (even ? transparent : Palette.alternate-background);
+
+    TouchArea {
+        clicked => { root.clicked(); }
+        double-clicked => { root.double-clicked(); }
+    }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 10px;
+
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 46px;
+                height: 26px;
+                border-radius: 6px;
+                background: root.item.score >= 100 ? #16a34a : (root.item.score >= 40 ? #d97706 : #6b7280);
+                Text {
+                    text: root.item.score;
+                    color: white;
+                    font-weight: 700;
+                }
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text {
+                text: root.item.release == "" ? @tr("(no release name)") : root.item.release;
+                overflow: elide;
+                color: root.selected ? Palette.selection-foreground : Palette.foreground;
+            }
+            Text {
+                text: root.item.provider
+                    + (root.item.hash-match ? " · " + @tr("hash match") : "")
+                    + (root.item.trusted ? " · " + @tr("trusted") : "")
+                    + (root.item.fps != "" ? " · " + root.item.fps + " fps" : "")
+                    + (root.item.hearing-impaired ? " · " + @tr("hearing impaired") : "")
+                    + (root.item.machine ? " · " + @tr("machine translated") : "");
+                overflow: elide;
+                font-size: 11px;
+                opacity: 0.7;
+                color: root.selected ? Palette.selection-foreground : Palette.foreground;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            width: 90px;
+            Text {
+                text: root.item.language;
+                font-weight: 700;
+                horizontal-alignment: right;
+                color: root.selected ? Palette.selection-foreground : Palette.foreground;
+            }
+            Text {
+                text: @tr("{} downloads", root.item.downloads);
+                font-size: 11px;
+                opacity: 0.6;
+                horizontal-alignment: right;
+                color: root.selected ? Palette.selection-foreground : Palette.foreground;
+            }
+        }
+    }
+}
+
+component Placeholder inherits Rectangle {
+    in property <string> text;
+    Text {
+        text: root.text;
+        opacity: 0.6;
+        wrap: word-wrap;
+        horizontal-alignment: center;
+        width: parent.width - 40px;
+    }
+}
+
+export component AppWindow inherits Window {
+    title: "SubMagician";
+    icon: @image-url("../assets/icon.svg");
+    preferred-width: 1180px;
+    preferred-height: 720px;
+    min-width: 760px;
+    min-height: 480px;
+
+    in property <string> version;
+    in property <string> folder;
+    in property <[FileRow]> files;
+    in property <[CandidateRow]> candidates;
+    in-out property <int> selected-file: -1;
+    in-out property <int> selected-candidate: -1;
+    in property <bool> busy;
+    in property <bool> candidates-loading;
+    in property <float> progress;
+    in property <int> status-kind;
+    in property <int> status-a;
+    in property <int> status-b;
+    in property <string> status-detail;
+    in property <bool> has-builtin-key;
+
+    // Settings
+    in-out property <string> languages;
+    in-out property <bool> recursive;
+    in-out property <bool> skip-existing;
+    in-out property <int> ui-language;
+    in-out property <string> os-username;
+    in-out property <string> os-password;
+    in-out property <string> os-api-key;
+
+    callback choose-folder();
+    callback rescan();
+    callback search-all();
+    callback download-all();
+    callback stop();
+    callback file-selected(int);
+    callback search-file(int);
+    callback download-candidate(int);
+    callback save-settings();
+
+    VerticalLayout {
+        TabWidget {
+            vertical-stretch: 1;
+
+            Tab {
+                title: @tr("Subtitles");
+                VerticalBox {
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Button {
+                            text: @tr("Choose folder…");
+                            enabled: !root.busy;
+                            clicked => { root.choose-folder(); }
+                        }
+                        Button {
+                            text: @tr("Search all");
+                            enabled: !root.busy && root.files.length > 0;
+                            clicked => { root.search-all(); }
+                        }
+                        Button {
+                            text: @tr("Download best for all");
+                            primary: true;
+                            enabled: !root.busy && root.files.length > 0;
+                            clicked => { root.download-all(); }
+                        }
+                        Button {
+                            text: @tr("Stop");
+                            enabled: root.busy;
+                            clicked => { root.stop(); }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        CheckBox {
+                            text: @tr("Include subfolders");
+                            enabled: !root.busy;
+                            checked <=> root.recursive;
+                            toggled => {
+                                root.save-settings();
+                                root.rescan();
+                            }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 12px;
+                        Text {
+                            text: root.folder == "" ? @tr("No folder chosen") : root.folder;
+                            overflow: elide;
+                            horizontal-stretch: 1;
+                            opacity: 0.8;
+                        }
+                        Text {
+                            text: @tr("Languages: {}", root.languages);
+                            opacity: 0.8;
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 10px;
+                        vertical-stretch: 1;
+
+                        Rectangle {
+                            horizontal-stretch: 6;
+                            border-width: 1px;
+                            border-color: Palette.border;
+                            border-radius: 4px;
+                            clip: true;
+                            if root.files.length == 0: Placeholder {
+                                text: @tr("Choose a folder with videos to start.");
+                            }
+                            ListView {
+                                for row[i] in root.files: FileItem {
+                                    item: row;
+                                    even: mod(i, 2) == 0;
+                                    selected: i == root.selected-file;
+                                    clicked => {
+                                        root.selected-file = i;
+                                        root.selected-candidate = -1;
+                                        root.file-selected(i);
+                                    }
+                                }
+                            }
+                        }
+
+                        VerticalLayout {
+                            horizontal-stretch: 5;
+                            spacing: 8px;
+                            Rectangle {
+                                vertical-stretch: 1;
+                                border-width: 1px;
+                                border-color: Palette.border;
+                                border-radius: 4px;
+                                clip: true;
+                                if root.candidates-loading: Placeholder {
+                                    text: @tr("Searching…");
+                                }
+                                if !root.candidates-loading && root.candidates.length == 0: Placeholder {
+                                    text: root.selected-file < 0 ? @tr("Select a video to see its subtitles.") : @tr("No subtitles found for this video.");
+                                }
+                                ListView {
+                                    for row[i] in root.candidates: CandidateItem {
+                                        item: row;
+                                        even: mod(i, 2) == 0;
+                                        selected: i == root.selected-candidate;
+                                        clicked => { root.selected-candidate = i; }
+                                        double-clicked => {
+                                            root.selected-candidate = i;
+                                            if !root.busy { root.download-candidate(i); }
+                                        }
+                                    }
+                                }
+                            }
+                            HorizontalLayout {
+                                spacing: 8px;
+                                alignment: end;
+                                Button {
+                                    text: @tr("Search again");
+                                    enabled: !root.busy && root.selected-file >= 0;
+                                    clicked => { root.search-file(root.selected-file); }
+                                }
+                                Button {
+                                    text: @tr("Download selected");
+                                    primary: true;
+                                    enabled: !root.busy && root.selected-candidate >= 0;
+                                    clicked => { root.download-candidate(root.selected-candidate); }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Tab {
+                title: @tr("Settings");
+                ScrollView {
+                    VerticalBox {
+                        alignment: start;
+                        GroupBox {
+                            title: @tr("Subtitles");
+                            VerticalLayout {
+                                spacing: 8px;
+                                Text {
+                                    text: @tr("Languages, most wanted first (for example: tr, en)");
+                                }
+                                LineEdit {
+                                    text <=> root.languages;
+                                    placeholder-text: "tr, en";
+                                }
+                                CheckBox {
+                                    text: @tr("Skip videos that already have a subtitle in the first language");
+                                    checked <=> root.skip-existing;
+                                }
+                            }
+                        }
+                        GroupBox {
+                            title: "OpenSubtitles.com";
+                            VerticalLayout {
+                                spacing: 8px;
+                                Text {
+                                    text: @tr("Optional. Logging in raises the daily download limit.");
+                                    wrap: word-wrap;
+                                }
+                                LineEdit {
+                                    text <=> root.os-username;
+                                    placeholder-text: @tr("User name");
+                                }
+                                LineEdit {
+                                    text <=> root.os-password;
+                                    input-type: password;
+                                    placeholder-text: @tr("Password");
+                                }
+                                LineEdit {
+                                    text <=> root.os-api-key;
+                                    placeholder-text: root.has-builtin-key ? @tr("API key (optional, built-in key is used)") : @tr("API key (required: this build has no built-in key)");
+                                }
+                            }
+                        }
+                        GroupBox {
+                            title: @tr("Interface");
+                            VerticalLayout {
+                                spacing: 8px;
+                                Text {
+                                    text: @tr("Language (applies after restart)");
+                                }
+                                ComboBox {
+                                    model: [@tr("Automatic"), "English", "Türkçe"];
+                                    current-index <=> root.ui-language;
+                                }
+                            }
+                        }
+                        HorizontalLayout {
+                            alignment: end;
+                            Button {
+                                text: @tr("Save");
+                                primary: true;
+                                clicked => { root.save-settings(); }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Tab {
+                title: @tr("About");
+                VerticalBox {
+                    alignment: start;
+                    Text {
+                        text: "SubMagician " + root.version;
+                        font-size: 20px;
+                        font-weight: 700;
+                    }
+                    Text {
+                        text: @tr("Finds subtitles for your videos, picks the one made for your file and saves it as UTF-8 next to the video.");
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: @tr("Subtitles from OpenSubtitles.com.");
+                        opacity: 0.7;
+                    }
+                    AboutSlint {
+                        max-height: 200px;
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            height: 30px;
+            background: Palette.alternate-background;
+            HorizontalLayout {
+                padding-left: 10px;
+                padding-right: 10px;
+                spacing: 10px;
+                Text {
+                    text: Texts.status(root.status-kind, root.status-a, root.status-b, root.status-detail);
+                    vertical-alignment: center;
+                    overflow: elide;
+                    horizontal-stretch: 1;
+                }
+                if root.busy: ProgressIndicator {
+                    width: 160px;
+                    height: 6px;
+                    y: (parent.height - self.height) / 2;
+                    progress: root.progress;
+                    indeterminate: root.progress <= 0;
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,170 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: tr\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "(no release name)"
+msgstr "(sürüm adı yok)"
+
+msgid "API key (optional, built-in key is used)"
+msgstr "API anahtarı (isteğe bağlı, yerleşik anahtar kullanılıyor)"
+
+msgid "API key (required: this build has no built-in key)"
+msgstr "API anahtarı (gerekli: bu sürümde yerleşik anahtar yok)"
+
+msgid "About"
+msgstr "Hakkında"
+
+msgid "Already has subtitle"
+msgstr "Altyazısı zaten var"
+
+msgid "Automatic"
+msgstr "Otomatik"
+
+msgid "Choose a folder with videos to start."
+msgstr "Başlamak için video içeren bir klasör seç."
+
+msgid "Choose folder…"
+msgstr "Klasör seç…"
+
+msgid "Done: {} saved, {} without subtitle."
+msgstr "Bitti: {} kaydedildi, {} videoya altyazı bulunamadı."
+
+msgid "Download best for all"
+msgstr "Hepsine en iyisini indir"
+
+msgid "Download limit reached: {}"
+msgstr "İndirme sınırı doldu: {}"
+
+msgid "Download selected"
+msgstr "Seçileni indir"
+
+msgid "Downloading {} / {}…"
+msgstr "İndiriliyor {} / {}…"
+
+msgid "Downloading…"
+msgstr "İndiriliyor…"
+
+msgid "Error: {}"
+msgstr "Hata: {}"
+
+msgid "Finds subtitles for your videos, picks the one made for your file and saves it as UTF-8 next to the video."
+msgstr "Videoların için altyazı bulur, senin dosyan için hazırlanmış olanı seçer ve videonun yanına UTF-8 olarak kaydeder."
+
+msgid "Found {} videos."
+msgstr "{} video bulundu."
+
+msgid "Has: {}"
+msgstr "Mevcut: {}"
+
+msgid "Include subfolders"
+msgstr "Alt klasörler dahil"
+
+msgid "Interface"
+msgstr "Arayüz"
+
+msgid "Language (applies after restart)"
+msgstr "Dil (yeniden başlatınca uygulanır)"
+
+msgid "Languages, most wanted first (for example: tr, en)"
+msgstr "Diller, en çok istenen önce (örneğin: tr, en)"
+
+msgid "Languages: {}"
+msgstr "Diller: {}"
+
+msgid "No folder chosen"
+msgstr "Klasör seçilmedi"
+
+msgid "No subtitles found for this video."
+msgstr "Bu video için altyazı bulunamadı."
+
+msgid "Nothing found"
+msgstr "Bulunamadı"
+
+msgid "Optional. Logging in raises the daily download limit."
+msgstr "İsteğe bağlı. Giriş yapınca günlük indirme sınırı artar."
+
+msgid "Password"
+msgstr "Şifre"
+
+msgid "Ready."
+msgstr "Hazır."
+
+msgid "Save"
+msgstr "Kaydet"
+
+msgid "Saved"
+msgstr "Kaydedildi"
+
+msgid "Saved {} ({} downloads left today)."
+msgstr "{} kaydedildi (bugün {} indirme hakkı kaldı)."
+
+msgid "Saved {}."
+msgstr "{} kaydedildi."
+
+msgid "Scanning folder…"
+msgstr "Klasör taranıyor…"
+
+msgid "Search again"
+msgstr "Yeniden ara"
+
+msgid "Search all"
+msgstr "Hepsini ara"
+
+msgid "Search finished: {} of {} videos have subtitles."
+msgstr "Arama bitti: {} / {} video için altyazı var."
+
+msgid "Searching {} / {}…"
+msgstr "Aranıyor {} / {}…"
+
+msgid "Searching…"
+msgstr "Aranıyor…"
+
+msgid "Select a video to see its subtitles."
+msgstr "Altyazılarını görmek için bir video seç."
+
+msgid "Settings"
+msgstr "Ayarlar"
+
+msgid "Settings saved."
+msgstr "Ayarlar kaydedildi."
+
+msgid "Skip videos that already have a subtitle in the first language"
+msgstr "İlk dilde altyazısı olan videoları atla"
+
+msgid "Stop"
+msgstr "Durdur"
+
+msgid "Stopped."
+msgstr "Durduruldu."
+
+msgid "Subtitles"
+msgstr "Altyazılar"
+
+msgid "Subtitles from OpenSubtitles.com."
+msgstr "Altyazılar OpenSubtitles.com'dan gelir."
+
+msgid "User name"
+msgstr "Kullanıcı adı"
+
+msgid "Waiting"
+msgstr "Bekliyor"
+
+msgid "hash match"
+msgstr "hash eşleşmesi"
+
+msgid "hearing impaired"
+msgstr "işitme engelli"
+
+msgid "machine translated"
+msgstr "makine çevirisi"
+
+msgid "trusted"
+msgstr "güvenilir"
+
+msgid "{} candidates"
+msgstr "{} aday"
+
+msgid "{} downloads"
+msgstr "{} indirme"
