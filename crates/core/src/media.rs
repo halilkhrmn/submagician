@@ -31,6 +31,8 @@ pub struct MediaFile {
     pub path: PathBuf,
     pub size: u64,
     pub existing: Vec<ExistingSubtitle>,
+    /// Languages of subtitle tracks inside the video (filled by [`crate::probe`], empty until then).
+    pub embedded: Vec<&'static str>,
 }
 
 impl MediaFile {
@@ -38,8 +40,9 @@ impl MediaFile {
         self.path.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default()
     }
 
+    /// A subtitle file next to the video, or a track inside it, is in `code`.
     pub fn has_language(&self, code: &str) -> bool {
-        self.existing.iter().any(|s| s.language == Some(code))
+        self.existing.iter().any(|s| s.language == Some(code)) || self.embedded.contains(&code)
     }
 }
 
@@ -56,7 +59,12 @@ pub fn scan(dir: &Path, recursive: bool) -> Vec<MediaFile> {
             if is_extra(e.path(), size) {
                 return None;
             }
-            Some(MediaFile { path: e.path().to_path_buf(), size, existing: existing_subtitles(e.path()) })
+            Some(MediaFile {
+                path: e.path().to_path_buf(),
+                size,
+                existing: existing_subtitles(e.path()),
+                embedded: Vec::new(),
+            })
         })
         .collect();
     files.sort_by(|a, b| a.path.cmp(&b.path));

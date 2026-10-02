@@ -1,11 +1,11 @@
 # SubMagician
 
 Bir klasördeki tüm videolar için altyazı bulur, **senin** dosyan için hazırlanmış olanı seçer,
-kodlamasını düzeltir ve videonun yanına kaydeder. Windows ve Linux (macOS sonra).
+kodlamasını ve zamanlamasını düzeltir ve videonun yanına kaydeder. Windows ve Linux (macOS sonra).
 
 [English](README.md)
 
-![SubMagician](docs/img/main-tr.png)
+![SubMagician](docs/img/main.png)
 
 ## Neden
 
@@ -19,28 +19,50 @@ kodlamasını düzeltir ve videonun yanına kaydeder. Windows ve Linux (macOS so
 - Kaynaklar: OpenSubtitles, SubDL ve Addic7ed (diziler, Gestdown üzerinden); her biri
   kapatılabilir. Sonuçlar birkaç gün önbellekte tutulur. RAR ve 7z arşivleri bsdtar / 7-Zip ile
   açılır (Windows 10+ içinde `tar.exe` hazır gelir).
-- Sırada: klasör izleme, gömülü altyazı izleri, Whisper.
 
 ## Kullanım
 
-1. **Klasör seç…**: klasördeki (ve alt klasörlerdeki) videolar, mevcut altyazılarıyla listelenir.
-2. **Hepsine en iyisini indir** ya da bir videoya tıklayıp puanlı adaylardan birini indir.
-3. Altyazı `Film.mkv` dosyasının yanına `Film.tr.srt` olarak kaydedilir; oynatıcılar kendisi açar.
-4. **ffmpeg** kuruluysa indirmeden hemen sonra sese göre senkronlanır (Ayarlar → Zamanlama);
-   zaten olan bir altyazı için **Sesle senkronla**'ya tıkla.
+1. **Choose folder…**, pencereye bir klasör bırak ya da dosya yöneticisinde klasöre sağ tıkla →
+   *Find subtitles with SubMagician* (bu girdiyi Settings → File manager ekler).
+2. **Download best for all** ya da bir videoya tıklayıp puanlı adaylardan birini indir. Adı
+   bozuk bir dosyayı **Search as…** ile başka bir adla arayabilirsin.
+3. Altyazı `Film.mkv` dosyasının yanına `Film.tr.srt` olarak kaydedilir; oynatıcılar kendisi
+   açar. Üzerine yazılan dosya saklanır, **Restore previous** onu geri getirir.
+4. **ffmpeg** kuruluysa indirmeden hemen sonra sese göre senkronlanır (Settings → Timing);
+   zaten olan bir altyazı için **Sync to audio**'ya tıkla.
 
-![Senkron](docs/img/sync-tr.png)
+![Senkron](docs/img/sync.png)
 
-Ayarlar: istenen diller sırayla (`tr, en`), daha yüksek günlük indirme sınırı için isteğe bağlı
-OpenSubtitles girişi, arayüz dili.
+Ayrıca:
+
+- İçinde istenen dilde altyazı izi olan videolar (MKV) atlanır.
+- **Watch folder**: klasöre eklenen yeni videolar, kopyalanması bitince altyazısını kendisi alır.
+- **Only missing** işi bitmiş videoları gizler; listenin altında **Play** ve **Show in folder**
+  var.
+
+Ayarlar: istenen diller sırayla (`tr, en`), kaynaklar, daha yüksek günlük indirme sınırı için
+isteğe bağlı OpenSubtitles girişi, ffmpeg yolu.
+
+## Komut satırı
+
+`submagician-cli` aynısını betikler için yapar, uygulamanın ayarlarını kullanır:
+
+```sh
+submagician-cli ~/Videolar                    # her video için en iyi altyazı + senkron
+submagician-cli -l tr,en --dry-run Film.mkv   # neyi seçeceğini göster
+submagician-cli --sources addic7ed --no-sync ~/Diziler/The.Office
+```
+
+`submagician <klasör ya da video>` uygulamayı o klasörle açar.
 
 ## Derleme
 
-Rust 1.88+ ve bir C derleyicisi. Linux'ta: `libfontconfig1-dev libxkbcommon-dev`. Senkron için:
-PATH'te ya da programın yanında `ffmpeg`.
+Rust 1.88+ ve bir C derleyicisi. Linux'ta: `libfontconfig1-dev libxkbcommon-dev`. Senkron ve
+gömülü izler için: PATH'te ya da programın yanında `ffmpeg` ve `ffprobe`.
 
 ```sh
-SUBMAGICIAN_OPENSUBTITLES_API_KEY=uygulama-anahtari cargo build --release -p submagician
+SUBMAGICIAN_OPENSUBTITLES_API_KEY=… SUBMAGICIAN_SUBDL_API_KEY=… \
+  cargo build --release -p submagician -p submagician-cli
 ```
 
 Yol haritası için `docs/PLAN.md`. Lisans: AGPL-3.0.

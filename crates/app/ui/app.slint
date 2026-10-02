@@ -5,6 +5,10 @@ export struct FileRow {
     folder: string,
     // Languages of the subtitles already next to the video ("tr, en").
     existing: string,
+    // Languages of subtitle tracks inside the video ("tr").
+    embedded: string,
+    // It has a subtitle (file or track) in the most wanted language.
+    has-wanted: bool,
     // See Texts.file-state.
     state: int,
     detail: string,
@@ -59,7 +63,8 @@ export global Texts {
     // 11 search finished (a = videos with candidates, b = videos searched), 12 reading audio (a = %),
     // 13 synced (a/b = speech match before/after %, detail = shift), 14 no ffmpeg,
     // 15 timing already fits (a = speech match %), 16 shifted (a = ms, detail = file), 17 nothing to sync,
-    // 18 search cache cleared
+    // 18 search cache cleared, 19 file-manager entry added, 20 removed, 21 watch: new video (detail),
+    // 22 previous subtitle restored (detail = file), 23 no previous subtitle
     public pure function status(kind: int, a: int, b: int, detail: string) -> string {
         if kind == 1 { return @tr("Scanning folder…"); }
         if kind == 2 { return @tr("Found {} videos.", a); }
@@ -80,6 +85,11 @@ export global Texts {
         if kind == 16 { return @tr("Moved {} by {} ms.", detail, a); }
         if kind == 17 { return @tr("This video has no subtitle to sync yet."); }
         if kind == 18 { return @tr("Search cache cleared."); }
+        if kind == 19 { return @tr("\"Find subtitles with SubMagician\" is now in the file manager's menu."); }
+        if kind == 20 { return @tr("Removed from the file manager's menu."); }
+        if kind == 21 { return @tr("New video in the folder: {}", detail); }
+        if kind == 22 { return @tr("Put back the previous {}.", detail); }
+        if kind == 23 { return @tr("There is no previous subtitle to put back."); }
         return @tr("Ready.");
     }
 }
@@ -91,6 +101,7 @@ component FileItem inherits Rectangle {
     callback clicked();
 
     height: 46px;
+    clip: true;
     background: selected ? Palette.selection-background : (even ? transparent : Palette.alternate-background);
 
     TouchArea {
@@ -139,7 +150,9 @@ component FileItem inherits Rectangle {
                 color: root.selected ? Palette.selection-foreground : Palette.foreground;
             }
             Text {
-                text: root.item.existing == "" ? "" : @tr("Has: {}", root.item.existing);
+                text: (root.item.existing == "" ? "" : @tr("Has: {}", root.item.existing))
+                    + (root.item.existing != "" && root.item.embedded != "" ? " · " : "")
+                    + (root.item.embedded == "" ? "" : @tr("In video: {}", root.item.embedded));
                 overflow: elide;
                 font-size: 11px;
                 opacity: 0.6;
@@ -265,7 +278,6 @@ export component AppWindow inherits Window {
     in-out property <string> languages;
     in-out property <bool> recursive;
     in-out property <bool> skip-existing;
-    in-out property <int> ui-language;
     in-out property <string> os-username;
     in-out property <string> os-password;
     in-out property <string> os-api-key;
@@ -291,6 +303,15 @@ export component AppWindow inherits Window {
     callback sync-reference(int);
     callback shift(int, int);
     callback clear-cache();
+    callback set-menu(bool);
+    callback toggle-watch(bool);
+    callback search-as(int, string);
+    callback restore(int);
+    in-out property <bool> only-missing;
+    in-out property <bool> watch;
+    in property <bool> menu-installed;
+    callback play(int);
+    callback reveal(int);
     callback save-settings();
 
     VerticalLayout {
@@ -325,6 +346,12 @@ export component AppWindow inherits Window {
                         }
                         Rectangle { horizontal-stretch: 1; }
                         CheckBox {
+                            text: @tr("Watch folder");
+                            enabled: root.folder != "";
+                            checked <=> root.watch;
+                            toggled => { root.toggle-watch(self.checked); }
+                        }
+                        CheckBox {
                             text: @tr("Include subfolders");
                             enabled: !root.busy;
                             checked <=> root.recursive;
@@ -353,25 +380,48 @@ export component AppWindow inherits Window {
                         spacing: 10px;
                         vertical-stretch: 1;
 
-                        Rectangle {
+                        VerticalLayout {
                             horizontal-stretch: 6;
-                            border-width: 1px;
-                            border-color: Palette.border;
-                            border-radius: 4px;
-                            clip: true;
-                            if root.files.length == 0: Placeholder {
-                                text: @tr("Choose a folder with videos to start.");
-                            }
-                            ListView {
-                                for row[i] in root.files: FileItem {
-                                    item: row;
-                                    even: mod(i, 2) == 0;
-                                    selected: i == root.selected-file;
-                                    clicked => {
-                                        root.selected-file = i;
-                                        root.selected-candidate = -1;
-                                        root.file-selected(i);
+                            spacing: 8px;
+                            Rectangle {
+                                vertical-stretch: 1;
+                                border-width: 1px;
+                                border-color: Palette.border;
+                                border-radius: 4px;
+                                clip: true;
+                                if root.files.length == 0: Placeholder {
+                                    text: @tr("Choose a folder with videos, or drop one here, to start.");
+                                }
+                                ListView {
+                                    for row[i] in root.files: FileItem {
+                                        item: row;
+                                        height: root.only-missing && row.has-wanted ? 0px : 46px;
+                                        even: mod(i, 2) == 0;
+                                        selected: i == root.selected-file;
+                                        clicked => {
+                                            root.selected-file = i;
+                                            root.selected-candidate = -1;
+                                            root.file-selected(i);
+                                        }
                                     }
+                                }
+                            }
+                            HorizontalLayout {
+                                spacing: 8px;
+                                Button {
+                                    text: @tr("Play");
+                                    enabled: root.selected-file >= 0;
+                                    clicked => { root.play(root.selected-file); }
+                                }
+                                Button {
+                                    text: @tr("Show in folder");
+                                    enabled: root.selected-file >= 0;
+                                    clicked => { root.reveal(root.selected-file); }
+                                }
+                                Rectangle { horizontal-stretch: 1; }
+                                CheckBox {
+                                    text: @tr("Only missing");
+                                    checked <=> root.only-missing;
                                 }
                             }
                         }
@@ -379,6 +429,19 @@ export component AppWindow inherits Window {
                         VerticalLayout {
                             horizontal-stretch: 5;
                             spacing: 8px;
+                            HorizontalLayout {
+                                spacing: 8px;
+                                search-as-edit := LineEdit {
+                                    enabled: !root.busy && root.selected-file >= 0;
+                                    placeholder-text: @tr("Search as… (e.g. The Office US S03E07)");
+                                    accepted(text) => { root.search-as(root.selected-file, text); }
+                                }
+                                Button {
+                                    text: @tr("Search");
+                                    enabled: !root.busy && root.selected-file >= 0;
+                                    clicked => { root.search-as(root.selected-file, search-as-edit.text); }
+                                }
+                            }
                             Rectangle {
                                 vertical-stretch: 1;
                                 border-width: 1px;
@@ -389,7 +452,9 @@ export component AppWindow inherits Window {
                                     text: @tr("Searching…");
                                 }
                                 if !root.candidates-loading && root.candidates.length == 0: Placeholder {
-                                    text: root.selected-file < 0 ? @tr("Select a video to see its subtitles.") : @tr("No subtitles found for this video.");
+                                    text: root.selected-file < 0 ? @tr("Select a video to see its subtitles.")
+                                        : root.files[root.selected-file].state == 0 ? @tr("Not searched yet.")
+                                        : @tr("No subtitles found for this video.");
                                 }
                                 ListView {
                                     for row[i] in root.candidates: CandidateItem {
@@ -438,6 +503,11 @@ export component AppWindow inherits Window {
                             text: @tr("Sync to subtitle…");
                             enabled: parent.can-time;
                             clicked => { root.sync-reference(root.selected-file); }
+                        }
+                        Button {
+                            text: @tr("Restore previous");
+                            enabled: parent.can-time;
+                            clicked => { root.restore(root.selected-file); }
                         }
                         Rectangle { horizontal-stretch: 1; }
                         for step in [-1000, -100, 100, 1000]: Button {
@@ -523,6 +593,24 @@ export component AppWindow inherits Window {
                             }
                         }
                         GroupBox {
+                            title: @tr("File manager");
+                            VerticalLayout {
+                                spacing: 8px;
+                                Text {
+                                    text: @tr("Right-click a folder or a video and choose \"Find subtitles with SubMagician\". On Linux it also adds SubMagician to \"Open with\", so folders can be dropped on its icon.");
+                                    wrap: word-wrap;
+                                }
+                                HorizontalLayout {
+                                    alignment: start;
+                                    spacing: 8px;
+                                    Button {
+                                        text: root.menu-installed ? @tr("Remove from the menu") : @tr("Add to the menu");
+                                        clicked => { root.set-menu(!root.menu-installed); }
+                                    }
+                                }
+                            }
+                        }
+                        GroupBox {
                             title: "OpenSubtitles.com";
                             VerticalLayout {
                                 spacing: 8px;
@@ -542,19 +630,6 @@ export component AppWindow inherits Window {
                                 LineEdit {
                                     text <=> root.os-api-key;
                                     placeholder-text: root.has-builtin-key ? @tr("API key (optional, built-in key is used)") : @tr("API key (required: this build has no built-in key)");
-                                }
-                            }
-                        }
-                        GroupBox {
-                            title: @tr("Interface");
-                            VerticalLayout {
-                                spacing: 8px;
-                                Text {
-                                    text: @tr("Language (applies after restart)");
-                                }
-                                ComboBox {
-                                    model: [@tr("Automatic"), "English", "Türkçe"];
-                                    current-index <=> root.ui-language;
                                 }
                             }
                         }

@@ -40,6 +40,28 @@ pub fn rewrite(path: &Path, text: &str) -> Result<()> {
     Ok(())
 }
 
+/// Swaps the subtitle at `path` with the `.bak` kept when it was replaced. `false` when there is
+/// no backup.
+pub fn restore_backup(path: &Path) -> Result<bool> {
+    let with = |suffix: &str| {
+        let mut p = path.as_os_str().to_owned();
+        p.push(suffix);
+        PathBuf::from(p)
+    };
+    let (backup, swap) = (with(".bak"), with(".swap"));
+    if !backup.is_file() {
+        return Ok(false);
+    }
+    if path.exists() {
+        fs::rename(path, &swap)?;
+        fs::rename(&backup, path)?;
+        fs::rename(&swap, &backup)?;
+    } else {
+        fs::rename(&backup, path)?;
+    }
+    Ok(true)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -62,6 +84,13 @@ mod tests {
         write_subtitle(&video, "tr", "srt", "3\n").unwrap();
         assert_eq!(fs::read(dir.join("Film.tr.srt.bak")).unwrap(), b"\xEF\xBB\xBF1\r\nbir\r\n");
         assert_eq!(fs::read(&first).unwrap(), b"\xEF\xBB\xBF3\r\n");
+
+        // Restoring swaps the two, so a second restore undoes the first.
+        assert!(restore_backup(&first).unwrap());
+        assert_eq!(fs::read(&first).unwrap(), b"\xEF\xBB\xBF1\r\nbir\r\n");
+        assert!(restore_backup(&first).unwrap());
+        assert_eq!(fs::read(&first).unwrap(), b"\xEF\xBB\xBF3\r\n");
+        assert!(!restore_backup(&dir.join("none.srt")).unwrap());
         fs::remove_dir_all(&dir).unwrap();
     }
 }

@@ -9,14 +9,18 @@ pub mod cache;
 pub mod engine;
 pub mod error;
 pub mod hash;
+pub mod integration;
 pub mod lang;
 pub mod media;
 pub mod name;
 pub mod output;
+pub mod probe;
 pub mod provider;
 pub mod score;
+pub mod settings;
 pub mod sync;
 pub mod text;
 pub mod timing;
+pub mod watch;
 
 pub use error::{Error, Result};

@@ -41,13 +41,15 @@ jobs:
         env:
           SUBMAGICIAN_OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
           SUBMAGICIAN_SUBDL_API_KEY: ${{ secrets.SUBDL_API_KEY }}
-        run: cargo build --release -p submagician
+        run: cargo build --release -p submagician -p submagician-cli
       - uses: actions/upload-artifact@v4
         with:
           name: submagician-${{ runner.os }}
           path: |
             target/release/submagician
             target/release/submagician.exe
+            target/release/submagician-cli
+            target/release/submagician-cli.exe
           if-no-files-found: error
 
   # Real searches and downloads against the providers, with the application keys from the

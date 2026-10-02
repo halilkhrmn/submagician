@@ -12,15 +12,14 @@ use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
 use submagician_core::cache::SearchCache;
 use submagician_core::engine::{Engine, Saved};
 use submagician_core::media::{self, MediaFile};
-use submagician_core::provider::gestdown::Gestdown;
-use submagician_core::provider::opensubtitles::{self, Credentials, OpenSubtitles};
-use submagician_core::provider::subdl::{self, SubDl};
-use submagician_core::provider::{Candidate, Provider, SearchQuery};
+use submagician_core::provider::opensubtitles;
+use submagician_core::provider::subdl;
+use submagician_core::provider::{Candidate, SearchQuery};
+use submagician_core::settings::Settings;
 use submagician_core::sync::{self, Report, Span};
-use submagician_core::{Error, audio, score};
+use submagician_core::{Error, audio, integration, name, output, probe, score, watch};
 use tokio::runtime::Handle;
 
-use crate::settings::Settings;
 use crate::{AppWindow, CandidateRow, FileRow};
 
 // File states, as in Texts.file-state.
@@ -56,6 +55,23 @@ const ST_TIMING_OK: i32 = 15;
 const ST_SHIFTED: i32 = 16;
 const ST_NO_SUBTITLE: i32 = 17;
 const ST_CACHE_CLEARED: i32 = 18;
+const ST_MENU_ADDED: i32 = 19;
+const ST_MENU_REMOVED: i32 = 20;
+const ST_WATCH_NEW: i32 = 21;
+const ST_RESTORED: i32 = 22;
+const ST_NO_BACKUP: i32 = 23;
+
+/// A new video in a watched folder is handled once its size has not changed for this long.
+const WATCH_SETTLE: Duration = Duration::from_secs(10);
+
+/// What happened to one video in a run.
+#[derive(Default)]
+struct ItemDone {
+    skipped: bool,
+    searched: bool,
+    found: bool,
+    saved: bool,
+}
 
 /// Pause between videos in batch runs, to stay well inside provider rate limits.
 const BATCH_PAUSE: Duration = Duration::from_millis(250);
@@ -69,6 +85,10 @@ struct Item {
     detail: String,
     /// Subtitle saved by this session, the one to sync or shift.
     subtitle: Option<PathBuf>,
+    /// Subtitle tracks inside the video were read (or cannot be: no ffprobe).
+    probed: bool,
+    /// What to search for instead of what the file name says ("Search as").
+    search_as: Option<String>,
 }
 
 impl Item {
@@ -81,6 +101,8 @@ impl Item {
             state: WAITING,
             detail: String::new(),
             subtitle: None,
+            probed: false,
+            search_as: None,
         }
     }
 }
@@ -95,6 +117,11 @@ struct Shared {
     cancel: AtomicBool,
     /// Speech spans per video, so syncing again does not decode the audio again.
     speech: Mutex<HashMap<PathBuf, Arc<Vec<Span>>>>,
+    /// Video to select once the folder scan that is running now has finished.
+    select_after_scan: Mutex<Option<PathBuf>>,
+    /// The folder watch, while it is on.
+    watcher: Mutex<Option<watch::WatchHandle>>,
+    watch_tx: tokio::sync::mpsc::UnboundedSender<(u64, PathBuf)>,
 }
 
 /// What to sync a subtitle to.
@@ -115,31 +142,14 @@ fn is_fatal(e: &Error) -> bool {
     matches!(e, Error::NotConfigured { .. } | Error::Auth { .. } | Error::Quota { .. })
 }
 
-/// The providers switched on in the settings (SubDL only when it has a key).
 fn build_engine(s: &Settings) -> Arc<Engine> {
-    let mut providers: Vec<Arc<dyn Provider>> = Vec::new();
-    if s.use_opensubtitles {
-        let credentials =
-            Credentials { username: s.opensubtitles_username.clone(), password: s.opensubtitles_password.clone() };
-        providers.push(Arc::new(OpenSubtitles::new(Some(s.opensubtitles_api_key.clone()), Some(credentials))));
-    }
-    if s.use_subdl
-        && let Some(subdl) = SubDl::new(Some(s.subdl_api_key.clone()))
-    {
-        providers.push(Arc::new(subdl));
-    }
-    if s.use_addic7ed {
-        providers.push(Arc::new(Gestdown::new()));
-    }
-    let mut engine = Engine::new(providers);
-    if let Some(dir) = Settings::search_cache_dir() {
-        engine = engine.with_cache(SearchCache::new(dir));
-    }
-    Arc::new(engine)
+    Arc::new(s.engine())
 }
 
 impl Controller {
-    pub fn start(ui: &AppWindow, settings: Settings, rt: Handle) {
+    /// Wires the window to the core. `initial` is a folder or video given on the command line
+    /// (file-manager action); without it the last folder is opened again.
+    pub fn start(ui: &AppWindow, settings: Settings, rt: Handle, initial: Option<PathBuf>) -> Controller {
         let last_folder = settings.last_folder.clone();
         apply_settings(ui, &settings);
         ui.set_ffmpeg_found(ffmpeg_text(&settings).into());
@@ -147,6 +157,7 @@ impl Controller {
         ui.set_has_builtin_key(opensubtitles::BUILT_IN_KEY.is_some());
         ui.set_has_subdl_key(subdl::BUILT_IN_KEY.is_some());
 
+        let (watch_tx, watch_rx) = tokio::sync::mpsc::unbounded_channel();
         let c = Controller {
             shared: Arc::new(Shared {
                 engine: Mutex::new(build_engine(&settings)),
@@ -156,6 +167,9 @@ impl Controller {
                 generation: AtomicU64::new(0),
                 cancel: AtomicBool::new(false),
                 speech: Mutex::new(HashMap::new()),
+                select_after_scan: Mutex::new(None),
+                watcher: Mutex::new(None),
+                watch_tx,
             }),
             ui: ui.as_weak(),
             rt,
@@ -228,8 +242,112 @@ impl Controller {
             move || c.save_settings()
         });
 
-        if let Some(folder) = last_folder.filter(|f| f.is_dir()) {
-            c.open_folder(folder);
+        ui.set_menu_installed(integration::is_installed());
+        ui.on_set_menu({
+            let c = c.clone();
+            move |add| c.set_menu(add)
+        });
+        rt_spawn_watch_worker(&c, watch_rx);
+        ui.on_toggle_watch({
+            let c = c.clone();
+            move |on| {
+                {
+                    let mut s = c.shared.settings.lock().unwrap();
+                    s.watch = on;
+                    if let Err(e) = s.save() {
+                        log::warn!("settings not saved: {e}");
+                    }
+                }
+                c.update_watch();
+            }
+        });
+        ui.on_search_as({
+            let c = c.clone();
+            move |i, text| {
+                let Ok(index) = usize::try_from(i) else { return };
+                let text = text.trim().to_owned();
+                if let Some(it) = c.shared.items.lock().unwrap().get_mut(index) {
+                    it.search_as = (!text.is_empty()).then_some(text);
+                }
+                c.file_selected(index, true);
+            }
+        });
+        ui.on_restore({
+            let c = c.clone();
+            move |i| c.restore(i)
+        });
+        ui.on_play({
+            let c = c.clone();
+            move |i| c.with_video(i, |p| opener::open(p).map_err(|e| e.to_string()))
+        });
+        ui.on_reveal({
+            let c = c.clone();
+            move |i| c.with_video(i, |p| opener::reveal(p).map_err(|e| e.to_string()))
+        });
+
+        match initial {
+            Some(path) => c.open_path(path),
+            None => {
+                if let Some(folder) = last_folder.filter(|f| f.is_dir()) {
+                    c.open_folder(folder);
+                }
+            }
+        }
+        c
+    }
+
+    /// Puts back the subtitle that the last download replaced (and the other way round).
+    fn restore(&self, index: i32) {
+        let Ok(index) = usize::try_from(index) else { return };
+        let Some(target) = self.target_subtitle(index) else {
+            self.status(ST_NO_BACKUP, 0, 0, "");
+            return;
+        };
+        match output::restore_backup(&target) {
+            Ok(true) => self.status(ST_RESTORED, 0, 0, file_name(&target)),
+            Ok(false) => self.status(ST_NO_BACKUP, 0, 0, ""),
+            Err(e) => self.status(ST_ERROR, 0, 0, e.to_string()),
+        }
+    }
+
+    /// Adds or removes "Find subtitles" in the file manager.
+    fn set_menu(&self, add: bool) {
+        let result = if add {
+            match integration::current_program() {
+                Some(program) => integration::install(&program),
+                None => Err(Error::Io(std::io::Error::other("cannot find SubMagician's own path"))),
+            }
+        } else {
+            integration::uninstall()
+        };
+        match result {
+            Ok(()) => self.status(if add { ST_MENU_ADDED } else { ST_MENU_REMOVED }, 0, 0, ""),
+            Err(e) => self.status(ST_ERROR, 0, 0, e.to_string()),
+        }
+        if let Some(ui) = self.ui.upgrade() {
+            ui.set_menu_installed(integration::is_installed());
+        }
+    }
+
+    /// Opens a folder, or a video's folder with that video selected (command line, drop).
+    pub fn open_path(&self, path: PathBuf) {
+        if path.is_dir() {
+            self.open_folder(path);
+        } else if let Some(folder) = path.parent().filter(|_| path.is_file()) {
+            *self.shared.select_after_scan.lock().unwrap() = Some(path.clone());
+            self.open_folder(folder.to_path_buf());
+        }
+    }
+
+    /// Runs `action` on the path of video `index` and reports a failure in the status bar.
+    fn with_video(&self, index: i32, action: impl FnOnce(&Path) -> Result<(), String>) {
+        let path = usize::try_from(index)
+            .ok()
+            .and_then(|i| self.shared.items.lock().unwrap().get(i).map(|it| it.media.path.clone()));
+        if let Some(path) = path
+            && let Err(e) = action(&path)
+        {
+            self.status(ST_ERROR, 0, 0, e);
         }
     }
 
@@ -291,6 +409,9 @@ impl Controller {
     }
 
     fn open_folder(&self, folder: PathBuf) {
+        if self.ui.upgrade().is_some_and(|ui| ui.get_busy()) {
+            return;
+        }
         let recursive = {
             let mut s = self.shared.settings.lock().unwrap();
             s.last_folder = Some(folder.clone());
@@ -317,15 +438,73 @@ impl Controller {
             if c.generation() != epoch {
                 return;
             }
+            let first = c.languages().swap_remove(0);
             let rows: Vec<FileRow> = {
                 let mut items = c.shared.items.lock().unwrap();
                 *items = found.into_iter().map(Item::new).collect();
-                items.iter().map(|it| file_row(&folder, it)).collect()
+                items.iter().map(|it| file_row(&folder, it, &first)).collect()
             };
             let count = rows.len() as i32;
-            let _ = c.ui.upgrade_in_event_loop(move |ui| ui.set_files(ModelRc::new(VecModel::from(rows))));
+            let select = c.shared.select_after_scan.lock().unwrap().take();
+            let selected = select.and_then(|p| c.shared.items.lock().unwrap().iter().position(|it| it.media.path == p));
+            let _ = c.ui.upgrade_in_event_loop(move |ui| {
+                ui.set_files(ModelRc::new(VecModel::from(rows)));
+                if let Some(i) = selected {
+                    ui.set_selected_file(i as i32);
+                }
+            });
             c.status(ST_SCANNED, count, 0, "");
+            let watcher = c.clone();
+            let _ = c.ui.upgrade_in_event_loop(move |_| watcher.update_watch());
+            // Read the subtitle tracks inside the videos in the background; the window stays usable.
+            let bg = c.clone();
+            tokio::spawn(async move {
+                for i in 0..count as usize {
+                    if bg.generation() != epoch {
+                        return;
+                    }
+                    bg.probe_item(epoch, i).await;
+                }
+            });
         });
+    }
+
+    /// Reads the subtitle tracks inside video `index` once (needs ffprobe).
+    async fn probe_item(&self, epoch: u64, index: usize) {
+        let video = {
+            let mut items = self.shared.items.lock().unwrap();
+            match items.get_mut(index) {
+                Some(it) if !it.probed => {
+                    it.probed = true;
+                    it.media.path.clone()
+                }
+                _ => return,
+            }
+        };
+        let configured = PathBuf::from(&self.shared.settings.lock().unwrap().ffmpeg_path);
+        let Some(ffprobe) = audio::find_ffprobe(Some(&configured)) else { return };
+        let langs = tokio::task::spawn_blocking(move || probe::embedded_languages(&ffprobe, &video)).await;
+        let langs = match langs {
+            Ok(Ok(langs)) => langs,
+            Ok(Err(e)) => {
+                log::debug!("ffprobe: {e}");
+                return;
+            }
+            Err(_) => return,
+        };
+        if langs.is_empty() {
+            return;
+        }
+        {
+            let mut items = self.shared.items.lock().unwrap();
+            if self.generation() != epoch {
+                return;
+            }
+            if let Some(it) = items.get_mut(index) {
+                it.media.embedded = langs;
+            }
+        }
+        self.push_row(epoch, index);
     }
 
     /// Shows the candidates of file `index`, searching first if needed (or if `force`).
@@ -390,7 +569,7 @@ impl Controller {
             let s = self.shared.settings.lock().unwrap();
             (s.language_codes(), s.skip_existing)
         };
-        let (mut saved, mut missing, mut with_subs, mut searched) = (0, 0, 0, 0);
+        let (mut saved, mut missing, mut with_subs, mut searched) = (0u32, 0u32, 0u32, 0u32);
         for i in 0..total {
             if self.generation() != epoch {
                 return;
@@ -402,48 +581,153 @@ impl Controller {
             self.status(if download { ST_DOWNLOADING } else { ST_SEARCHING }, i as i32 + 1, total as i32, "");
             self.progress(i as f32 / total as f32);
 
-            let (has_first, was_searched) = {
-                let items = self.shared.items.lock().unwrap();
-                let it = &items[i];
-                (it.media.has_language(&languages[0]), it.searched)
-            };
-            if skip_existing && has_first {
-                self.set_state(epoch, i, HAS_SUBTITLE, "");
-                continue;
-            }
-            if !was_searched {
-                searched += 1;
-                match self.search_item(epoch, i, false).await {
-                    Ok(count) if count > 0 => with_subs += 1,
-                    Ok(_) => {}
-                    Err(e) => return self.stop_with(e),
+            match self.process_item(epoch, i, download, &languages, skip_existing).await {
+                Ok(done) => {
+                    searched += u32::from(done.searched);
+                    with_subs += u32::from(done.found);
+                    saved += u32::from(done.saved);
+                    missing += u32::from(download && !done.saved && !done.skipped);
                 }
-                tokio::time::sleep(BATCH_PAUSE).await;
-            }
-            if download {
-                match self.fetch_item(epoch, i, None).await {
-                    Ok(Some(_)) => {
-                        saved += 1;
-                        if self.auto_sync()
-                            && matches!(self.sync_item(epoch, i, Reference::Audio).await, Err(Error::Cancelled))
-                        {
-                            self.status(ST_STOPPED, 0, 0, "");
-                            return;
-                        }
-                    }
-                    Ok(None) => missing += 1,
-                    Err(e) if is_fatal(&e) => return self.stop_with(e),
-                    Err(_) => missing += 1,
+                Err(Error::Cancelled) => {
+                    self.status(ST_STOPPED, 0, 0, "");
+                    return;
                 }
-                tokio::time::sleep(BATCH_PAUSE).await;
+                Err(e) => return self.stop_with(e),
             }
         }
         self.progress(1.0);
         if download {
-            self.status(ST_FINISHED, saved, missing, "");
+            self.status(ST_FINISHED, saved as i32, missing as i32, "");
         } else {
-            self.status(ST_SEARCH_FINISHED, with_subs, searched, "");
+            self.status(ST_SEARCH_FINISHED, with_subs as i32, searched as i32, "");
         }
+    }
+
+    /// One video of a batch run or the folder watch: skip it if it has the first language,
+    /// search if needed, and (if `download`) save the best subtitle and sync it. Errors are the
+    /// ones that stop a run: fatal provider errors and Stop.
+    async fn process_item(
+        &self,
+        epoch: u64,
+        i: usize,
+        download: bool,
+        languages: &[String],
+        skip_existing: bool,
+    ) -> Result<ItemDone, Error> {
+        let mut done = ItemDone::default();
+        self.probe_item(epoch, i).await;
+        let (has_first, was_searched) = {
+            let items = self.shared.items.lock().unwrap();
+            let Some(it) = items.get(i) else { return Ok(done) };
+            (it.media.has_language(&languages[0]), it.searched)
+        };
+        if skip_existing && has_first {
+            self.set_state(epoch, i, HAS_SUBTITLE, "");
+            done.skipped = true;
+            return Ok(done);
+        }
+        if !was_searched {
+            done.searched = true;
+            done.found = self.search_item(epoch, i, false).await? > 0;
+            tokio::time::sleep(BATCH_PAUSE).await;
+        } else {
+            done.found = self.shared.items.lock().unwrap().get(i).is_some_and(|it| !it.candidates.is_empty());
+        }
+        if download {
+            match self.fetch_item(epoch, i, None).await {
+                Ok(Some(_)) => {
+                    done.saved = true;
+                    if self.auto_sync()
+                        && let Err(Error::Cancelled) = self.sync_item(epoch, i, Reference::Audio).await
+                    {
+                        return Err(Error::Cancelled);
+                    }
+                }
+                Ok(None) => {}
+                Err(e) if is_fatal(&e) => return Err(e),
+                Err(_) => {}
+            }
+            tokio::time::sleep(BATCH_PAUSE).await;
+        }
+        Ok(done)
+    }
+
+    /// Starts or stops watching the open folder, as the setting says.
+    fn update_watch(&self) {
+        let (on, recursive) = {
+            let s = self.shared.settings.lock().unwrap();
+            (s.watch, s.recursive)
+        };
+        let root = self.shared.root.lock().unwrap().clone();
+        let mut slot = self.shared.watcher.lock().unwrap();
+        *slot = None;
+        let (true, Some(root)) = (on, root) else { return };
+        let epoch = self.generation();
+        let tx = self.shared.watch_tx.clone();
+        match watch::watch(&root, recursive, WATCH_SETTLE, move |path| {
+            let _ = tx.send((epoch, path));
+        }) {
+            Ok(handle) => *slot = Some(handle),
+            Err(e) => self.status(ST_ERROR, 0, 0, e.to_string()),
+        }
+    }
+
+    /// Handles videos the folder watch reports, one at a time.
+    async fn watch_worker(self, mut rx: tokio::sync::mpsc::UnboundedReceiver<(u64, PathBuf)>) {
+        while let Some((epoch, path)) = rx.recv().await {
+            if self.generation() != epoch {
+                continue;
+            }
+            let Some(index) = self.add_video(epoch, &path) else { continue };
+            self.status(ST_WATCH_NEW, 0, 0, file_name(&path));
+            let (languages, skip_existing) = {
+                let s = self.shared.settings.lock().unwrap();
+                (s.language_codes(), s.skip_existing)
+            };
+            if let Err(e) = self.process_item(epoch, index, true, &languages, skip_existing).await {
+                self.stop_with(e);
+            }
+        }
+    }
+
+    /// Adds `path` to the list (or finds it there) and returns its index.
+    fn add_video(&self, epoch: u64, path: &Path) -> Option<usize> {
+        let root = self.shared.root.lock().unwrap().clone().unwrap_or_default();
+        let first = self.languages().swap_remove(0);
+        let (index, row) = {
+            let mut items = self.shared.items.lock().unwrap();
+            if self.generation() != epoch {
+                return None;
+            }
+            if let Some(i) = items.iter().position(|it| it.media.path == path) {
+                return Some(i);
+            }
+            let media = MediaFile {
+                path: path.to_path_buf(),
+                size: path.metadata().map(|m| m.len()).unwrap_or(0),
+                existing: media::existing_subtitles(path),
+                embedded: Vec::new(),
+            };
+            items.push(Item::new(media));
+            let index = items.len() - 1;
+            (index, file_row(&root, &items[index], &first))
+        };
+        let shared = self.shared.clone();
+        let _ = self.ui.upgrade_in_event_loop(move |ui| {
+            if shared.generation.load(Ordering::SeqCst) != epoch {
+                return;
+            }
+            let files = ui.get_files();
+            match files.as_any().downcast_ref::<VecModel<FileRow>>() {
+                Some(model) => model.push(row),
+                None => {
+                    let mut rows: Vec<FileRow> = files.iter().collect();
+                    rows.push(row);
+                    ui.set_files(ModelRc::new(VecModel::from(rows)));
+                }
+            }
+        });
+        Some(index)
     }
 
     fn stop_with(&self, e: Error) {
@@ -462,9 +746,12 @@ impl Controller {
             return Ok(0);
         };
         self.set_state(epoch, index, SEARCHING, "");
-        let query = tokio::task::spawn_blocking(move || Engine::query_for(&media, &languages))
+        let mut query = tokio::task::spawn_blocking(move || Engine::query_for(&media, &languages))
             .await
             .map_err(|e| Error::Parse(e.to_string()))?;
+        if let Some(text) = self.shared.items.lock().unwrap().get(index).and_then(|it| it.search_as.clone()) {
+            query.name = name::parse(&text);
+        }
         let outcome = self.engine().search(&query, fresh).await;
         let count = outcome.candidates.len();
         let fatal = if count == 0 { outcome.errors.into_iter().find(is_fatal) } else { None };
@@ -623,8 +910,8 @@ impl Controller {
         let pct = |v: f32| (v * 100.0).round() as i32;
         match &result {
             Ok(r) if r.applied => {
-                self.set_state(epoch, index, SYNCED, sync_detail(r));
-                self.status(ST_SYNCED, pct(r.overlap_before), pct(r.overlap_after), sync_detail(r));
+                self.set_state(epoch, index, SYNCED, r.summary());
+                self.status(ST_SYNCED, pct(r.overlap_before), pct(r.overlap_after), r.summary());
             }
             Ok(r) => {
                 self.set_state(epoch, index, TIMING_OK, "");
@@ -672,8 +959,7 @@ impl Controller {
     }
 
     fn set_state(&self, epoch: u64, index: usize, state: i32, detail: impl Into<String>) {
-        let root = self.shared.root.lock().unwrap().clone().unwrap_or_default();
-        let row = {
+        {
             let mut items = self.shared.items.lock().unwrap();
             if self.generation() != epoch {
                 return;
@@ -681,7 +967,21 @@ impl Controller {
             let Some(it) = items.get_mut(index) else { return };
             it.state = state;
             it.detail = detail.into();
-            file_row(&root, it)
+        }
+        self.push_row(epoch, index);
+    }
+
+    /// Sends the current state of file `index` to its row in the window.
+    fn push_row(&self, epoch: u64, index: usize) {
+        let root = self.shared.root.lock().unwrap().clone().unwrap_or_default();
+        let first = self.languages().swap_remove(0);
+        let row = {
+            let items = self.shared.items.lock().unwrap();
+            if self.generation() != epoch {
+                return;
+            }
+            let Some(it) = items.get(index) else { return };
+            file_row(&root, it, &first)
         };
         let shared = self.shared.clone();
         let _ = self.ui.upgrade_in_event_loop(move |ui| {
@@ -738,15 +1038,16 @@ impl Controller {
     }
 }
 
+fn rt_spawn_watch_worker(c: &Controller, rx: tokio::sync::mpsc::UnboundedReceiver<(u64, PathBuf)>) {
+    let worker = c.clone();
+    c.rt.spawn(worker.watch_worker(rx));
+}
+
 fn apply_settings(ui: &AppWindow, s: &Settings) {
+    ui.set_watch(s.watch);
     ui.set_languages(s.language_codes().join(", ").into());
     ui.set_recursive(s.recursive);
     ui.set_skip_existing(s.skip_existing);
-    ui.set_ui_language(match s.ui_language.as_str() {
-        "en" => 1,
-        "tr" => 2,
-        _ => 0,
-    });
     ui.set_os_username(s.opensubtitles_username.clone().into());
     ui.set_os_password(s.opensubtitles_password.clone().into());
     ui.set_os_api_key(s.opensubtitles_api_key.clone().into());
@@ -762,12 +1063,6 @@ fn read_settings(ui: &AppWindow, s: &mut Settings) {
     s.languages = ui.get_languages().into();
     s.recursive = ui.get_recursive();
     s.skip_existing = ui.get_skip_existing();
-    s.ui_language = match ui.get_ui_language() {
-        1 => "en",
-        2 => "tr",
-        _ => "auto",
-    }
-    .into();
     s.opensubtitles_username = ui.get_os_username().trim().into();
     s.opensubtitles_password = ui.get_os_password().into();
     s.opensubtitles_api_key = ui.get_os_api_key().trim().into();
@@ -789,24 +1084,7 @@ fn file_name(path: &Path) -> String {
     path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
 }
 
-/// "+4.00 s" and, for a frame-rate fix, "· 25 → 23.976 fps".
-fn sync_detail(r: &Report) -> String {
-    let mut out = format!("{:+.2} s", r.offset_ms as f64 / 1000.0);
-    if (r.ratio - 1.0).abs() > 1e-6 {
-        const RATES: [f64; 3] = [23.976, 24.0, 25.0];
-        let pair = RATES
-            .iter()
-            .flat_map(|a| RATES.iter().map(move |b| (*a, *b)))
-            .find(|(a, b)| (a / b - r.ratio).abs() < 1e-6);
-        out += &match pair {
-            Some((a, b)) => format!(" · {a} → {b} fps"),
-            None => format!(" · ×{:.4}", r.ratio),
-        };
-    }
-    out
-}
-
-fn file_row(root: &Path, it: &Item) -> FileRow {
+fn file_row(root: &Path, it: &Item, first_language: &str) -> FileRow {
     let folder =
         it.media.path.parent().map(|p| p.strip_prefix(root).unwrap_or(p).display().to_string()).unwrap_or_default();
     let mut langs: Vec<&str> = it.media.existing.iter().map(|s| s.language.unwrap_or("?")).collect();
@@ -815,6 +1093,8 @@ fn file_row(root: &Path, it: &Item) -> FileRow {
         name: it.media.file_name().into(),
         folder: folder.into(),
         existing: langs.join(", ").into(),
+        embedded: it.media.embedded.join(", ").into(),
+        has_wanted: it.media.has_language(first_language),
         state: it.state,
         detail: it.detail.clone().into(),
     }

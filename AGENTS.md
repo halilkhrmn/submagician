@@ -30,9 +30,9 @@ Work-log entries: newest on top, `### YYYY-MM-DD — short title`, then bullets 
 - Provider application keys come from build-time env (`SUBMAGICIAN_OPENSUBTITLES_API_KEY`,
   `SUBMAGICIAN_SUBDL_API_KEY`) and CI secrets (`OPENSUBTITLES_API_KEY`, `SUBDL_API_KEY`); never
   commit them.
-- User-visible strings go through `@tr` in `.slint`; add the Turkish text to
-  `crates/app/lang/tr/LC_MESSAGES/submagician.po` in the same change. Rust passes state codes,
-  not sentences.
+- The UI is English only for now (translations come later). Keep every user-visible string in
+  `.slint` inside `@tr(...)` so translations can be added as gettext files without code changes;
+  Rust passes state codes, not sentences.
 - `README.md` is the main README and stays in English; `README.tr.md` is its translation. Change
   them together.
 
@@ -48,13 +48,15 @@ and `libxkbcommon-dev` (runtime: `libxkbcommon-x11-0` on X11). Syncing to audio 
 | Lint | `cargo clippy --all-targets -- -D warnings` and `cargo fmt --all --check` |
 | Run | `cargo run -p submagician` |
 | Run with an OpenSubtitles key | `SUBMAGICIAN_OPENSUBTITLES_API_KEY=… cargo run -p submagician` |
-| Release build | `cargo build --release -p submagician` |
+| Release build | `cargo build --release -p submagician -p submagician-cli` |
+| CLI | `cargo run -p submagician-cli -- --dry-run <folder>` |
+| Windows compile check from Linux | `rustup target add x86_64-pc-windows-gnu`, MinGW, `cargo check --target x86_64-pc-windows-gnu` |
 | Headless screenshot (Linux) | `xvfb-run -a env SLINT_BACKEND=winit-software target/debug/submagician` + `import -window root shot.png` |
 
 ## Architecture and file map
 
 ```
-crates/core/   submagician-core, no GUI
+crates/core/   submagician-core, no GUI (shared by app and CLI)
   media        folder scan, video/subtitle extensions, existing <stem>.<lang>.srt detection
   hash         OpenSubtitles moviehash
   name         hunch-based name parsing (title, year, S/E, source, group), folder fallback, tokens
@@ -70,13 +72,17 @@ crates/core/   submagician-core, no GUI
   archive      zip extraction; RAR/7z through bsdtar / 7-Zip / unrar
   output       <stem>.<lang>.<ext> writer (UTF-8 BOM, CRLF, .bak once)
   engine       query → search all providers → rank → fetch → decode → save
+  settings     settings file (JSON in the OS config folder) and the engine it describes
+  probe        subtitle track languages inside a video (ffprobe)
+  watch        folder watch: videos that appeared and stopped growing
+  integration  "Find subtitles" in the file manager (HKCU registry / Linux launchers, scripts)
 crates/app/    submagician (binary)
   ui/app.slint window: Subtitles / Settings / About tabs, Texts global (state codes → @tr text)
-  src/main.rs  startup, translation selection, tokio runtime
+  src/main.rs  startup, tokio runtime, command-line path, drag & drop
   src/controller.rs  UI callbacks → tokio tasks → upgrade_in_event_loop; batch runs, epochs
-  src/settings.rs    JSON settings in the OS config folder
-  lang/tr/…/submagician.po  Turkish UI
+  src/wayland_drop.rs  drops under Wayland (own wl_data_device on winit's connection)
   assets/icon.svg
+crates/cli/    submagician-cli: same pipeline for scripts (--lang, --sources, --dry-run, …)
 docs/          PLAN, PROGRESS, DECISIONS
 ```
 
