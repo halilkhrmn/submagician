@@ -54,8 +54,24 @@ fn accept_wayland_drops(ui: &AppWindow, controller: controller::Controller) {
     });
 }
 
+/// Logs go to `submagician.log` in the data folder (a Windows release build has no console),
+/// replaced at every start; panics are logged there too.
+fn init_logging() {
+    let mut builder = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"));
+    let file = directories::ProjectDirs::from("", "", "SubMagician").and_then(|d| {
+        std::fs::create_dir_all(d.data_dir()).ok()?;
+        std::fs::File::create(d.data_dir().join("submagician.log")).ok()
+    });
+    if let Some(file) = file {
+        builder.target(env_logger::Target::Pipe(Box::new(file)));
+    }
+    builder.init();
+    std::panic::set_hook(Box::new(|info| log::error!("panic: {info}")));
+    log::info!("SubMagician {} starting", env!("CARGO_PKG_VERSION"));
+}
+
 fn main() -> Result<(), slint::PlatformError> {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    init_logging();
 
     let settings = submagician_core::settings::Settings::load();
     let ui = AppWindow::new()?;

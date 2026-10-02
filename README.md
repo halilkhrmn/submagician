@@ -28,8 +28,8 @@ encoding and the timing, and saves it next to the video. Windows and Linux (macO
    A wrongly named file can be searched under another name with **Search as…**.
 3. The subtitle is saved as `Movie.tr.srt` next to `Movie.mkv`; players load it on their own.
    The file it replaced is kept, **Restore previous** puts it back.
-4. With **ffmpeg** installed it is synced to the audio right after the download (Settings →
-   Timing), or click **Sync to audio** for a subtitle you already have.
+4. With **ffmpeg** it is synced to the audio right after the download, or click **Sync to audio**
+   for a subtitle you already have. On Windows, Settings → Timing → **Download ffmpeg** gets it.
 
 ![Sync](docs/img/sync.png)
 

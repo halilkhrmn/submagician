@@ -87,3 +87,16 @@ Numbered, newest last. Each: what, and why.
 31. **Wayland drops through our own `wl_data_device`** on winit's connection (winit 0.30 has none
     on Wayland). libwayland is loaded at run time (winit's `wayland-dlopen`), so X11-only systems
     need nothing extra.
+32. **Opening a video lists only that video** (command line, drop, Open video…); a folder lists
+    the folder. A first Windows test showed that opening one episode and getting the whole season
+    was not what was wanted. The folder watch only runs for folders.
+33. **Windows: ffmpeg on request from Settings.** The "essentials" build from gyan.dev (linked
+    from ffmpeg.org) is downloaded only when the user clicks, checked against its published
+    SHA-256, and only ffmpeg.exe/ffprobe.exe are kept, in the data folder's `tools/`. Linux users
+    get a package-manager hint. Bundling it in an installer stays in Phase 6.
+34. **A missing ffmpeg is not a failed subtitle.** The row stays "Saved"; the status bar says
+    the subtitle was not synced and where to get ffmpeg.
+35. **File dialogs are owned by the window** (rfd `set_parent`), so on Windows they cannot open
+    behind it and leave the window looking frozen. The app logs to `submagician.log` in its data
+    folder (replaced at each start, panics included) because a Windows release build has no
+    console.

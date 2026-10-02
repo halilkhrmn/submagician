@@ -18,6 +18,20 @@
 
 ## Work log
 
+### 2026-10-02 — First Windows test: fixes
+- Feedback: opening one video listed the whole folder; "Saved, sync failed: ffmpeg" on every
+  row (no ffmpeg on Windows); the window stopped responding after "Sync to audio".
+- Done: opening a video lists only that video, plus an "Open video…" button; Settings → Timing
+  can download ffmpeg on Windows (gyan.dev essentials, SHA-256 checked, only ffmpeg/ffprobe
+  kept, found automatically); a missing ffmpeg leaves the row "Saved" with a clear status; file
+  dialogs are owned by the window; `submagician.log` in the data folder with sync steps, errors
+  and panics.
+- Verified: unit test for the zip extraction, live download of the real ffmpeg build (checksum,
+  two `MZ` programs); in the app under Xvfb: a video from the command line listed alone, "Sync
+  to audio" without ffmpeg kept "Saved" and showed the hint, log file written; Windows cross
+  check.
+- Open: the freeze did not reproduce here; the log file will tell if it happens again.
+
 ### 2026-10-02 — Phase 4 convenience
 - Done: English-only UI for now (Turkish bundle and picker removed, strings stay in `@tr`);
   `probe` (embedded subtitle languages via ffprobe, counted as having the language, read in the
