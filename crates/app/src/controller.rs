@@ -97,6 +97,8 @@ struct Shared {
     cancel: AtomicBool,
     /// Speech spans per video, so syncing again does not decode the audio again.
     speech: Mutex<HashMap<PathBuf, Arc<Vec<Span>>>>,
+    /// Video to select once the folder scan that is running now has finished.
+    select_after_scan: Mutex<Option<PathBuf>>,
 }
 
 /// What to sync a subtitle to.
@@ -122,7 +124,9 @@ fn build_engine(s: &Settings) -> Arc<Engine> {
 }
 
 impl Controller {
-    pub fn start(ui: &AppWindow, settings: Settings, rt: Handle) {
+    /// Wires the window to the core. `initial` is a folder or video given on the command line
+    /// (file-manager action); without it the last folder is opened again.
+    pub fn start(ui: &AppWindow, settings: Settings, rt: Handle, initial: Option<PathBuf>) -> Controller {
         let last_folder = settings.last_folder.clone();
         apply_settings(ui, &settings);
         ui.set_ffmpeg_found(ffmpeg_text(&settings).into());
@@ -139,6 +143,7 @@ impl Controller {
                 generation: AtomicU64::new(0),
                 cancel: AtomicBool::new(false),
                 speech: Mutex::new(HashMap::new()),
+                select_after_scan: Mutex::new(None),
             }),
             ui: ui.as_weak(),
             rt,
@@ -211,8 +216,45 @@ impl Controller {
             move || c.save_settings()
         });
 
-        if let Some(folder) = last_folder.filter(|f| f.is_dir()) {
-            c.open_folder(folder);
+        ui.on_play({
+            let c = c.clone();
+            move |i| c.with_video(i, |p| opener::open(p).map_err(|e| e.to_string()))
+        });
+        ui.on_reveal({
+            let c = c.clone();
+            move |i| c.with_video(i, |p| opener::reveal(p).map_err(|e| e.to_string()))
+        });
+
+        match initial {
+            Some(path) => c.open_path(path),
+            None => {
+                if let Some(folder) = last_folder.filter(|f| f.is_dir()) {
+                    c.open_folder(folder);
+                }
+            }
+        }
+        c
+    }
+
+    /// Opens a folder, or a video's folder with that video selected (command line, drop).
+    pub fn open_path(&self, path: PathBuf) {
+        if path.is_dir() {
+            self.open_folder(path);
+        } else if let Some(folder) = path.parent().filter(|_| path.is_file()) {
+            *self.shared.select_after_scan.lock().unwrap() = Some(path.clone());
+            self.open_folder(folder.to_path_buf());
+        }
+    }
+
+    /// Runs `action` on the path of video `index` and reports a failure in the status bar.
+    fn with_video(&self, index: i32, action: impl FnOnce(&Path) -> Result<(), String>) {
+        let path = usize::try_from(index)
+            .ok()
+            .and_then(|i| self.shared.items.lock().unwrap().get(i).map(|it| it.media.path.clone()));
+        if let Some(path) = path
+            && let Err(e) = action(&path)
+        {
+            self.status(ST_ERROR, 0, 0, e);
         }
     }
 
@@ -274,6 +316,9 @@ impl Controller {
     }
 
     fn open_folder(&self, folder: PathBuf) {
+        if self.ui.upgrade().is_some_and(|ui| ui.get_busy()) {
+            return;
+        }
         let recursive = {
             let mut s = self.shared.settings.lock().unwrap();
             s.last_folder = Some(folder.clone());
@@ -306,7 +351,14 @@ impl Controller {
                 items.iter().map(|it| file_row(&folder, it)).collect()
             };
             let count = rows.len() as i32;
-            let _ = c.ui.upgrade_in_event_loop(move |ui| ui.set_files(ModelRc::new(VecModel::from(rows))));
+            let select = c.shared.select_after_scan.lock().unwrap().take();
+            let selected = select.and_then(|p| c.shared.items.lock().unwrap().iter().position(|it| it.media.path == p));
+            let _ = c.ui.upgrade_in_event_loop(move |ui| {
+                ui.set_files(ModelRc::new(VecModel::from(rows)));
+                if let Some(i) = selected {
+                    ui.set_selected_file(i as i32);
+                }
+            });
             c.status(ST_SCANNED, count, 0, "");
             // Read the subtitle tracks inside the videos in the background; the window stays usable.
             let bg = c.clone();

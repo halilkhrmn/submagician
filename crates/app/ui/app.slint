@@ -294,6 +294,8 @@ export component AppWindow inherits Window {
     callback sync-reference(int);
     callback shift(int, int);
     callback clear-cache();
+    callback play(int);
+    callback reveal(int);
     callback save-settings();
 
     VerticalLayout {
@@ -356,25 +358,43 @@ export component AppWindow inherits Window {
                         spacing: 10px;
                         vertical-stretch: 1;
 
-                        Rectangle {
+                        VerticalLayout {
                             horizontal-stretch: 6;
-                            border-width: 1px;
-                            border-color: Palette.border;
-                            border-radius: 4px;
-                            clip: true;
-                            if root.files.length == 0: Placeholder {
-                                text: @tr("Choose a folder with videos to start.");
-                            }
-                            ListView {
-                                for row[i] in root.files: FileItem {
-                                    item: row;
-                                    even: mod(i, 2) == 0;
-                                    selected: i == root.selected-file;
-                                    clicked => {
-                                        root.selected-file = i;
-                                        root.selected-candidate = -1;
-                                        root.file-selected(i);
+                            spacing: 8px;
+                            Rectangle {
+                                vertical-stretch: 1;
+                                border-width: 1px;
+                                border-color: Palette.border;
+                                border-radius: 4px;
+                                clip: true;
+                                if root.files.length == 0: Placeholder {
+                                    text: @tr("Choose a folder with videos, or drop one here, to start.");
+                                }
+                                ListView {
+                                    for row[i] in root.files: FileItem {
+                                        item: row;
+                                        even: mod(i, 2) == 0;
+                                        selected: i == root.selected-file;
+                                        clicked => {
+                                            root.selected-file = i;
+                                            root.selected-candidate = -1;
+                                            root.file-selected(i);
+                                        }
                                     }
+                                }
+                            }
+                            HorizontalLayout {
+                                spacing: 8px;
+                                alignment: start;
+                                Button {
+                                    text: @tr("Play");
+                                    enabled: root.selected-file >= 0;
+                                    clicked => { root.play(root.selected-file); }
+                                }
+                                Button {
+                                    text: @tr("Show in folder");
+                                    enabled: root.selected-file >= 0;
+                                    clicked => { root.reveal(root.selected-file); }
                                 }
                             }
                         }
@@ -392,7 +412,9 @@ export component AppWindow inherits Window {
                                     text: @tr("Searching…");
                                 }
                                 if !root.candidates-loading && root.candidates.length == 0: Placeholder {
-                                    text: root.selected-file < 0 ? @tr("Select a video to see its subtitles.") : @tr("No subtitles found for this video.");
+                                    text: root.selected-file < 0 ? @tr("Select a video to see its subtitles.")
+                                        : root.files[root.selected-file].state == 0 ? @tr("Not searched yet.")
+                                        : @tr("No subtitles found for this video.");
                                 }
                                 ListView {
                                     for row[i] in root.candidates: CandidateItem {
