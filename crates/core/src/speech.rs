@@ -322,7 +322,9 @@ fn tighten(segments: &mut [Segment], samples: &[f32]) {
     const FRAME: usize = RATE / 100;
     let mut vad = Vad::new_with_rate_and_mode(SampleRate::Rate16kHz, VadMode::Aggressive);
     let voiced: Vec<bool> = samples
-        .chunks_exact(FRAME)
+        .as_chunks::<FRAME>()
+        .0
+        .iter()
         .map(|f| {
             let pcm: Vec<i16> = f.iter().map(|s| (s.clamp(-1.0, 1.0) * 32767.0) as i16).collect();
             vad.is_voice_segment(&pcm).unwrap_or(false)
