@@ -5187,7 +5187,6 @@ name = "submagician"
 version = "0.1.0"
 dependencies = [
  "directories",
- "env_logger",
  "log",
  "opener",
  "rfd",
@@ -5218,6 +5217,7 @@ version = "0.1.0"
 dependencies = [
  "alass-core",
  "chardetng",
+ "chrono",
  "directories",
  "encoding_rs",
  "hunch",
@@ -5233,6 +5233,7 @@ dependencies = [
  "walkdir",
  "webrtc-vad",
  "whisper-rs",
+ "windows-sys 0.60.2",
  "zip",
 ]
 

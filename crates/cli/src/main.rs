@@ -1,5 +1,8 @@
 //! `submagician-cli`: the app's search → pick → save → sync, for scripts and file-manager actions.
 //! Uses the same settings file as the app (languages, logins, sources, ffmpeg).
+//!
+//! `--player` is the mode the mpv and VLC plugins use (see `crates/core/src/players.rs`): one
+//! video, machine-readable output.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -7,6 +10,8 @@ use std::process::ExitCode;
 use std::sync::atomic::AtomicBool;
 
 use clap::Parser;
+
+mod player;
 use submagician_core::engine::Engine;
 use submagician_core::media::{self, MediaFile};
 use submagician_core::settings::Settings;
@@ -48,6 +53,14 @@ struct Args {
     /// Download a Whisper model and exit.
     #[arg(long, value_name = "MODEL")]
     download_model: Option<String>,
+    /// For player plugins: one video (a path or a file:// URI); prints `subtitle<TAB>path` for
+    /// the subtitle to load and `message<TAB>text` for the player to show.
+    #[arg(long)]
+    player: bool,
+    /// With --player: the video just started; do nothing when it already has a subtitle in the
+    /// first language (next to it or inside it).
+    #[arg(long, requires = "player")]
+    auto: bool,
 }
 
 fn main() -> ExitCode {
@@ -76,6 +89,10 @@ fn main() -> ExitCode {
     if lang::parse_list(&settings.languages).is_empty() {
         eprintln!("no known language in {:?}", settings.languages);
         return ExitCode::from(2);
+    }
+    if args.player {
+        let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().expect("tokio runtime");
+        return runtime.block_on(player::run(&args, &settings));
     }
     let videos = collect(&args.paths, !args.no_recursive);
     if videos.is_empty() {
@@ -252,14 +269,14 @@ async fn run(args: &Args, settings: &Settings, videos: Vec<MediaFile>) -> ExitCo
 }
 
 /// Writes a subtitle from the audio and saves it next to the video.
-fn generate(model: &Path, ffmpeg: &Path, video: &Path, target: &str) -> Result<PathBuf, Error> {
+pub(crate) fn generate(model: &Path, ffmpeg: &Path, video: &Path, target: &str) -> Result<PathBuf, Error> {
     let progress: std::sync::Arc<dyn Fn(f32) + Send + Sync> = std::sync::Arc::new(|_| {});
     let cancel = std::sync::Arc::new(AtomicBool::new(false));
     let t = speech::transcribe(model, ffmpeg, video, Some(target), cancel, progress)?;
     output::write_subtitle(video, &t.language, "srt", &t.to_srt())
 }
 
-fn sync_note(ffmpeg: &Path, video: &Path, subtitle: &Path) -> String {
+pub(crate) fn sync_note(ffmpeg: &Path, video: &Path, subtitle: &Path) -> String {
     let speech = match audio::extract_speech(ffmpeg, video, &AtomicBool::new(false), &mut |_| {}) {
         Ok(s) => s,
         Err(e) => return format!(", not synced: {e}"),
@@ -295,6 +312,9 @@ mod tests {
         assert_eq!(d.download_model.as_deref(), Some("base"));
         let g = Args::try_parse_from(["submagician-cli", "--generate", "--model", "tiny", "x"]).unwrap();
         assert!(g.generate && g.model.as_deref() == Some("tiny"));
+        let p = Args::try_parse_from(["submagician-cli", "--player", "--auto", "--", "-odd name.mkv"]).unwrap();
+        assert!(p.player && p.auto && p.paths == vec![PathBuf::from("-odd name.mkv")]);
+        assert!(Args::try_parse_from(["submagician-cli", "--auto", "x"]).is_err(), "--auto needs --player");
     }
 
     #[test]

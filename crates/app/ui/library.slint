@@ -1,0 +1,321 @@
+import { Button, LineEdit, CheckBox, ListView, Palette } from "std-widgets.slint";
+import { Theme, Icons } from "theme.slint";
+import { AppState, Texts } from "state.slint";
+import { Card, EmptyState, PageHeader, FileCard, CandidateCard, Glyph, Badge, Note } from "components.slint";
+
+// The selected video: what it has, the subtitles the sources offer, and its timing.
+component DetailsPanel inherits VerticalLayout {
+    property <int> index: AppState.selected-file;
+    property <bool> has-file: index >= 0 && index < AppState.files.length;
+    property <bool> has-subtitle: has-file && AppState.files[index].existing != "";
+    spacing: 12px;
+
+    if !has-file: Card {
+        vertical-stretch: 1;
+        EmptyState {
+            icon: Icons.captions;
+            icon-size: 40px;
+            title: @tr("Pick a video");
+            subtitle: @tr("Its subtitles show up here: what it has, what the sources offer, and its timing.");
+        }
+    }
+
+    if has-file: Card {
+        inner-spacing: 8px;
+        Text {
+            text: AppState.files[index].name;
+            font-size: 15px;
+            font-weight: 600;
+            wrap: word-wrap;
+        }
+        if AppState.files[index].folder != "": Text {
+            text: AppState.files[index].folder;
+            font-size: 12px;
+            color: Theme.muted;
+            overflow: elide;
+        }
+        HorizontalLayout {
+            spacing: 6px;
+            alignment: start;
+            Badge {
+                text: Texts.file-state(AppState.files[index].state, AppState.files[index].detail);
+                tone: Theme.tone-color(Texts.file-tone(AppState.files[index].state));
+                max-width: 360px;
+            }
+        }
+        Text {
+            text: (AppState.files[index].existing == "" ? @tr("No subtitle next to it") : @tr("Next to it: {}", AppState.files[index].existing))
+                + (AppState.files[index].embedded == "" ? "" : " · " + @tr("Inside: {}", AppState.files[index].embedded));
+            font-size: 12px;
+            color: Theme.muted;
+            wrap: word-wrap;
+        }
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: start;
+            Button {
+                text: @tr("Play");
+                icon: Icons.play;
+                colorize-icon: true;
+                clicked => { AppState.play(index); }
+            }
+            Button {
+                text: @tr("Show in folder");
+                icon: Icons.folder;
+                colorize-icon: true;
+                clicked => { AppState.reveal(index); }
+            }
+        }
+    }
+
+    if has-file: Card {
+        title: @tr("Subtitles found");
+        icon: Icons.captions;
+        has-icon: true;
+        vertical-stretch: 1;
+        inner-spacing: 8px;
+        HorizontalLayout {
+            spacing: 8px;
+            search-as-edit := LineEdit {
+                enabled: !AppState.busy;
+                placeholder-text: @tr("Search as… (e.g. The Office US S03E07)");
+                accepted(text) => { AppState.search-as(index, text); }
+            }
+            Button {
+                icon: Icons.search;
+                colorize-icon: true;
+                enabled: !AppState.busy;
+                accessible-label: @tr("Search");
+                clicked => { AppState.search-as(index, search-as-edit.text); }
+            }
+        }
+        Rectangle {
+            vertical-stretch: 1;
+            min-height: 120px;
+            if AppState.candidates-loading: EmptyState {
+                icon: Icons.search;
+                icon-size: 32px;
+                title: @tr("Searching…");
+            }
+            if !AppState.candidates-loading && AppState.candidates.length == 0: EmptyState {
+                icon: Icons.captions;
+                icon-size: 32px;
+                title: AppState.files[index].state == 0 ? @tr("Not searched yet") : @tr("No subtitles found");
+                subtitle: AppState.files[index].state == 0 ? @tr("Selecting a video searches for it.")
+                    : @tr("Try \"Search as…\" with the show or film name, or write one from the audio.");
+            }
+            ListView {
+                for row[i] in AppState.candidates: CandidateCard {
+                    item: row;
+                    selected: i == AppState.selected-candidate;
+                    clicked => { AppState.selected-candidate = i; }
+                    double-clicked => {
+                        AppState.selected-candidate = i;
+                        if !AppState.busy { AppState.download-candidate(i); }
+                    }
+                }
+            }
+        }
+        HorizontalLayout {
+            spacing: 8px;
+            Button {
+                text: @tr("From audio");
+                icon: Icons.mic;
+                colorize-icon: true;
+                enabled: !AppState.busy;
+                clicked => { AppState.generate(index); }
+            }
+            Button {
+                icon: Icons.refresh;
+                colorize-icon: true;
+                accessible-label: @tr("Search again");
+                enabled: !AppState.busy;
+                clicked => { AppState.search-file(index); }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            Button {
+                text: @tr("Download");
+                icon: Icons.download;
+                colorize-icon: true;
+                primary: true;
+                enabled: !AppState.busy && AppState.selected-candidate >= 0;
+                clicked => { AppState.download-candidate(AppState.selected-candidate); }
+            }
+        }
+    }
+
+    if has-file: Card {
+        title: @tr("Timing");
+        icon: Icons.clock;
+        has-icon: true;
+        inner-spacing: 8px;
+        if !has-subtitle: Text {
+            text: @tr("Once the video has a subtitle, its timing can be fixed here.");
+            font-size: 12px;
+            color: Theme.muted;
+            wrap: word-wrap;
+        }
+        HorizontalLayout {
+            spacing: 8px;
+            Button {
+                text: @tr("Sync to audio");
+                icon: Icons.speaker;
+                colorize-icon: true;
+                enabled: !AppState.busy && has-subtitle;
+                clicked => { AppState.sync-audio(index); }
+            }
+            Button {
+                text: @tr("To a subtitle…");
+                icon: Icons.sync;
+                colorize-icon: true;
+                enabled: !AppState.busy && has-subtitle;
+                clicked => { AppState.sync-reference(index); }
+            }
+            Button {
+                icon: Icons.restore;
+                colorize-icon: true;
+                accessible-label: @tr("Put back the previous subtitle");
+                enabled: !AppState.busy && has-subtitle;
+                clicked => { AppState.restore(index); }
+            }
+        }
+        HorizontalLayout {
+            spacing: 6px;
+            Text {
+                text: @tr("Move:");
+                vertical-alignment: center;
+                color: Theme.muted;
+                font-size: 12px;
+            }
+            for step in [-1000, -100, 100, 1000]: Button {
+                text: (step > 0 ? "+" : "−") + abs(step / 1000) + " s";
+                enabled: !AppState.busy && has-subtitle;
+                clicked => { AppState.shift(index, step); }
+            }
+        }
+    }
+}
+
+export component LibraryPage inherits VerticalLayout {
+    padding: Theme.page-padding;
+    padding-bottom: 12px;
+    spacing: 16px;
+
+    if AppState.folder == "": EmptyState {
+        icon: Icons.captions;
+        icon-size: 64px;
+        title: @tr("Subtitles for your videos");
+        subtitle: @tr("Choose a folder or some videos, or drop them on this window. SubMagician finds the subtitle made for each file in your languages, fixes its text and timing, and saves it next to the video.");
+        Button {
+            text: @tr("Choose folder…");
+            icon: Icons.folder-open;
+            colorize-icon: true;
+            primary: true;
+            clicked => { AppState.choose-folder(); }
+        }
+        Button {
+            text: @tr("Open videos…");
+            icon: Icons.video;
+            colorize-icon: true;
+            clicked => { AppState.choose-videos(); }
+        }
+    }
+
+    if AppState.folder != "": PageHeader {
+        title: AppState.folder-name;
+        subtitle: AppState.folder;
+        Button {
+            text: @tr("Choose folder…");
+            icon: Icons.folder-open;
+            colorize-icon: true;
+            enabled: !AppState.busy;
+            clicked => { AppState.choose-folder(); }
+        }
+        Button {
+            text: @tr("Open videos…");
+            icon: Icons.video;
+            colorize-icon: true;
+            enabled: !AppState.busy;
+            clicked => { AppState.choose-videos(); }
+        }
+    }
+
+    if AppState.folder != "": HorizontalLayout {
+        spacing: 8px;
+        if !AppState.busy: Button {
+            text: @tr("Get subtitles for all");
+            icon: Icons.download;
+            colorize-icon: true;
+            primary: true;
+            enabled: AppState.files.length > 0;
+            clicked => { AppState.download-all(); }
+        }
+        if !AppState.busy: Button {
+            text: @tr("Search all");
+            icon: Icons.search;
+            colorize-icon: true;
+            enabled: AppState.files.length > 0;
+            clicked => { AppState.search-all(); }
+        }
+        if AppState.busy: Button {
+            text: @tr("Stop");
+            icon: Icons.stop;
+            colorize-icon: true;
+            clicked => { AppState.stop(); }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        CheckBox {
+            text: @tr("Only missing");
+            checked <=> AppState.only-missing;
+        }
+        CheckBox {
+            text: @tr("Subfolders");
+            enabled: !AppState.busy;
+            checked <=> AppState.recursive;
+            toggled => {
+                AppState.settings-changed();
+                AppState.rescan();
+            }
+        }
+        CheckBox {
+            text: @tr("Watch for new videos");
+            checked <=> AppState.watch;
+            toggled => { AppState.toggle-watch(self.checked); }
+        }
+    }
+
+    if AppState.folder != "": HorizontalLayout {
+        spacing: 16px;
+        vertical-stretch: 1;
+
+        Card {
+            horizontal-stretch: 1;
+            inner-padding: 6px;
+            inner-spacing: 0px;
+            if AppState.files.length == 0 && !AppState.busy: EmptyState {
+                icon: Icons.video;
+                icon-size: 40px;
+                title: @tr("No videos here");
+                subtitle: AppState.recursive ? @tr("This folder and its subfolders have no video files.")
+                    : @tr("This folder has no video files. Turn on \"Subfolders\" to look deeper.");
+            }
+            if AppState.files.length > 0 || AppState.busy: ListView {
+                vertical-stretch: 1;
+                for row[i] in AppState.files: FileCard {
+                    item: row;
+                    height: AppState.only-missing && row.has-wanted ? 0px : 60px;
+                    selected: i == AppState.selected-file;
+                    clicked => {
+                        AppState.selected-file = i;
+                        AppState.selected-candidate = -1;
+                        AppState.file-selected(i);
+                    }
+                }
+            }
+        }
+
+        DetailsPanel {
+            width: 420px;
+        }
+    }
+}

@@ -1,0 +1,254 @@
+// Everything the window shows and every action it offers, in one global the Rust side reads and
+// writes (`ui.global::<AppState>()`), so the pages in other files need no property plumbing.
+
+export struct FileRow {
+    name: string,
+    folder: string,
+    // Languages of the subtitles already next to the video ("tr, en").
+    existing: string,
+    // Languages of subtitle tracks inside the video ("tr").
+    embedded: string,
+    // It has a subtitle (file or track) in the most wanted language.
+    has-wanted: bool,
+    // See Texts.file-state.
+    state: int,
+    detail: string,
+}
+
+export struct CandidateRow {
+    score: int,
+    language: string,
+    release: string,
+    provider: string,
+    downloads: int,
+    hash-match: bool,
+    trusted: bool,
+    machine: bool,
+    hearing-impaired: bool,
+    fps: string,
+}
+
+export struct PlayerRow {
+    name: string,
+    // 0 not on this computer, 1 in a sandbox (detail = Flatpak/Snap), 2 can get the plugin,
+    // 3 has the plugin
+    status: int,
+    // Where the plugin goes, or the sandbox.
+    detail: string,
+    // 0 mpv, 1 mpv.net, 2 VLC
+    kind: int,
+}
+
+// Texts built from state codes, so every visible string goes through @tr.
+export global Texts {
+    // 0 waiting, 1 searching, 2 found (detail = count), 3 nothing found, 4 downloading,
+    // 5 saved (detail = file name), 6 error (detail = message), 7 already has a wanted subtitle,
+    // 8 syncing, 9 synced (detail = "+1.20 s · 25 → 23.976 fps"), 10 sync failed (detail), 11 timing already fine,
+    // 12 generating from audio, 13 generated (detail = file)
+    public pure function file-state(state: int, detail: string) -> string {
+        if state == 1 { return @tr("Searching…"); }
+        if state == 2 { return @tr("{} subtitles found", detail); }
+        if state == 3 { return @tr("Nothing found"); }
+        if state == 4 { return @tr("Downloading…"); }
+        if state == 5 { return @tr("Subtitle saved"); }
+        if state == 6 { return @tr("Error: {}", detail); }
+        if state == 7 { return @tr("Has a subtitle"); }
+        if state == 8 { return @tr("Syncing…"); }
+        if state == 9 { return @tr("Saved and synced {}", detail); }
+        if state == 10 { return @tr("Saved, sync failed: {}", detail); }
+        if state == 11 { return @tr("Saved, timing fits"); }
+        if state == 12 { return @tr("Listening to the audio…"); }
+        if state == 13 { return @tr("Written from the audio"); }
+        return @tr("Not searched yet");
+    }
+
+    // Tone of a file state (see Theme.tone-color).
+    public pure function file-tone(state: int) -> int {
+        if state == 1 || state == 4 || state == 8 || state == 12 { return 1; }
+        if state == 5 || state == 7 || state == 9 || state == 11 || state == 13 { return 2; }
+        if state == 2 || state == 10 { return 3; }
+        if state == 3 || state == 6 { return 4; }
+        return 0;
+    }
+
+    // 0 ready, 1 scanning, 2 scanned (a = videos), 3 searching (a/b), 4 downloading (a/b),
+    // 5 finished (a = saved, b = failed), 6 error (detail), 7 stopped, 8 download limit (detail),
+    // 9 one file saved (detail = name, a = downloads left or -1), 10 settings saved,
+    // 11 search finished (a = videos with candidates, b = videos searched), 12 reading audio (a = %),
+    // 13 synced (a/b = speech match before/after %, detail = shift), 14 no ffmpeg,
+    // 15 timing already fits (a = speech match %), 16 shifted (a = ms, detail = file), 17 nothing to sync,
+    // 18 search cache cleared, 19 file-manager entry added, 20 removed, 21 watch: new video (detail),
+    // 22 previous subtitle restored (detail = file), 23 no previous subtitle, 24 model download (a = %),
+    // 25 model ready (detail = id), 26 listening (a = %), 27 written from audio (detail = file), 28 no model
+    // 29 ffmpeg download (a = %), 30 ffmpeg ready, 31 plugin installed (detail = player),
+    // 32 plugin removed (detail = player), 33 update download (a = %), 34 up to date,
+    // 35 report saved (detail = path)
+    public pure function status(kind: int, a: int, b: int, detail: string) -> string {
+        if kind == 1 { return @tr("Scanning folder…"); }
+        if kind == 2 { return @tr("Found {} videos.", a); }
+        if kind == 3 { return @tr("Searching {} / {}…", a, b); }
+        if kind == 4 { return @tr("Getting subtitles {} / {}…", a, b); }
+        if kind == 5 { return @tr("Done: {} saved, {} without subtitle.", a, b); }
+        if kind == 6 { return @tr("Error: {}", detail); }
+        if kind == 7 { return @tr("Stopped."); }
+        if kind == 8 { return @tr("Download limit reached: {}", detail); }
+        if kind == 9 && a >= 0 { return @tr("Saved {} ({} downloads left today).", detail, a); }
+        if kind == 9 { return @tr("Saved {}.", detail); }
+        if kind == 10 { return @tr("Settings saved."); }
+        if kind == 11 { return @tr("Search finished: {} of {} videos have subtitles.", a, b); }
+        if kind == 12 { return @tr("Reading the audio… {}%", a); }
+        if kind == 13 { return @tr("Synced: {}. Speech match {}% → {}%.", detail, a, b); }
+        if kind == 14 { return @tr("ffmpeg not found, so the subtitle was saved but not synced. Settings → Timing can get it."); }
+        if kind == 15 { return @tr("Timing already fits ({}% speech match); left unchanged.", a); }
+        if kind == 16 { return @tr("Moved {} by {} ms.", detail, a); }
+        if kind == 17 { return @tr("This video has no subtitle to sync yet."); }
+        if kind == 18 { return @tr("Search cache cleared."); }
+        if kind == 19 { return @tr("\"Find subtitles with SubMagician\" is now in the file manager's menu."); }
+        if kind == 20 { return @tr("Removed from the file manager's menu."); }
+        if kind == 21 { return @tr("New video in the folder: {}", detail); }
+        if kind == 22 { return @tr("Put back the previous {}.", detail); }
+        if kind == 23 { return @tr("There is no previous subtitle to put back."); }
+        if kind == 24 { return @tr("Downloading the speech model… {}%", a); }
+        if kind == 25 { return @tr("Speech model {} is ready.", detail); }
+        if kind == 26 { return @tr("Listening to the audio… {}%", a); }
+        if kind == 27 { return @tr("Wrote {} from the audio.", detail); }
+        if kind == 28 { return @tr("No speech model yet: download one in Settings → Speech."); }
+        if kind == 29 { return @tr("Downloading ffmpeg… {}%", a); }
+        if kind == 30 { return @tr("ffmpeg is ready; subtitles can be synced to the audio now."); }
+        if kind == 31 { return @tr("The {} plugin is installed. Restart the player if it is open.", detail); }
+        if kind == 32 { return @tr("The {} plugin is removed.", detail); }
+        if kind == 33 { return @tr("Downloading the update… {}%", a); }
+        if kind == 34 { return @tr("SubMagician is up to date."); }
+        if kind == 35 { return @tr("Report saved: {}", detail); }
+        return @tr("Ready.");
+    }
+
+    // Tone of a status message.
+    public pure function status-tone(kind: int) -> int {
+        if kind == 1 || kind == 3 || kind == 4 || kind == 12 || kind == 24 || kind == 26 || kind == 29 || kind == 33 { return 1; }
+        if kind == 6 || kind == 8 { return 4; }
+        if kind == 14 || kind == 17 || kind == 23 || kind == 28 { return 3; }
+        if kind == 5 || kind == 9 || kind == 13 || kind == 15 || kind == 22 || kind == 25 || kind == 27 || kind == 30 || kind == 31 || kind == 34 { return 2; }
+        return 0;
+    }
+}
+
+// Pages of the sidebar.
+export enum Page { library, players, settings }
+
+export global AppState {
+    in-out property <Page> page: Page.library;
+    in property <string> version;
+
+    // Library
+    in property <string> folder;
+    // The folder's own name, or the video's when one was opened.
+    in property <string> folder-name;
+    in property <[FileRow]> files;
+    in property <[CandidateRow]> candidates;
+    in-out property <int> selected-file: -1;
+    in-out property <int> selected-candidate: -1;
+    in property <bool> busy;
+    in property <bool> candidates-loading;
+    in property <float> progress;
+    in property <int> status-kind;
+    in property <int> status-a;
+    in property <int> status-b;
+    in property <string> status-detail;
+    in-out property <bool> only-missing;
+    in-out property <bool> watch;
+
+    callback choose-folder();
+    callback choose-videos();
+    callback rescan();
+    callback search-all();
+    callback download-all();
+    callback stop();
+    callback file-selected(int);
+    callback search-file(int);
+    callback download-candidate(int);
+    callback sync-audio(int);
+    callback sync-reference(int);
+    callback shift(int, int);
+    callback toggle-watch(bool);
+    callback search-as(int, string);
+    callback restore(int);
+    callback generate(int);
+    callback play(int);
+    callback reveal(int);
+
+    // Settings (saved as they change)
+    in-out property <string> languages;
+    in-out property <bool> recursive;
+    in-out property <bool> skip-existing;
+    in-out property <string> os-username;
+    in-out property <string> os-password;
+    in-out property <string> os-api-key;
+    in property <bool> has-builtin-key;
+    in-out property <bool> auto-sync;
+    in-out property <string> ffmpeg-path;
+    // Where ffmpeg was found, "" if not.
+    in property <string> ffmpeg-found;
+    in property <bool> can-download-ffmpeg;
+    in-out property <bool> use-opensubtitles;
+    in-out property <bool> use-subdl;
+    in-out property <bool> use-addic7ed;
+    in-out property <string> subdl-api-key;
+    in property <bool> has-subdl-key;
+    in property <[string]> whisper-models;
+    in-out property <int> whisper-model-index;
+    in property <bool> whisper-installed;
+    in-out property <bool> generate-missing;
+    in property <bool> menu-installed;
+    in-out property <bool> check-updates;
+    in-out property <bool> detailed-logs;
+    in property <string> log-dir;
+
+    // A switch changed (saved now) / text was typed (saved after a pause).
+    callback settings-changed();
+    callback settings-edited();
+    callback clear-cache();
+    callback set-menu(bool);
+    callback download-model();
+    callback whisper-model-changed(int);
+    callback download-ffmpeg();
+    callback open-log-folder();
+    callback open-link(string);
+
+    // Player plugins
+    in property <[PlayerRow]> players;
+    in-out property <bool> player-auto;
+    // The command-line tool the plugins run is next to the app.
+    in property <bool> cli-found;
+    callback install-player(int);
+    callback remove-player(int);
+    callback set-player-auto(bool);
+    callback refresh-players();
+
+    // Updates: 0 nothing known, 1 checking, 2 a newer version can be installed here,
+    // 3 a newer version to download by hand (package or portable copy), 4 downloading,
+    // 5 ready: restarting, 6 check failed (update-error)
+    in property <int> update-state;
+    in property <string> update-version;
+    in property <string> update-error;
+    callback check-for-update();
+    callback install-update();
+    callback open-release();
+    in-out property <bool> update-dismissed;
+
+    // "What's new" after an update
+    in-out property <bool> whats-new-visible;
+    in property <string> whats-new;
+    callback show-whats-new();
+
+    // "Report a problem"
+    in-out property <bool> report-visible;
+    in property <string> report-text;
+    in property <string> report-saved-path;
+    in property <string> support-email;
+    in-out property <string> report-note;
+    callback report-problem();
+    callback report-github();
+    callback report-email();
+    callback report-show-file();
+}

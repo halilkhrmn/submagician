@@ -1,0 +1,67 @@
+import { Palette } from "std-widgets.slint";
+
+// Fluent UI System Icons, built in as SVG so every OS shows the same set (icons/README.md).
+export global Icons {
+    out property <image> library: @image-url("icons/library.svg");
+    out property <image> folder-open: @image-url("icons/folder-open.svg");
+    out property <image> video: @image-url("icons/video.svg");
+    out property <image> settings: @image-url("icons/settings.svg");
+    out property <image> search: @image-url("icons/search.svg");
+    out property <image> download: @image-url("icons/download.svg");
+    out property <image> stop: @image-url("icons/stop.svg");
+    out property <image> play: @image-url("icons/play.svg");
+    out property <image> folder: @image-url("icons/folder.svg");
+    out property <image> eye: @image-url("icons/eye.svg");
+    out property <image> mic: @image-url("icons/mic.svg");
+    out property <image> refresh: @image-url("icons/refresh.svg");
+    out property <image> sync: @image-url("icons/sync.svg");
+    out property <image> restore: @image-url("icons/restore.svg");
+    out property <image> info: @image-url("icons/info.svg");
+    out property <image> warning: @image-url("icons/warning.svg");
+    out property <image> error: @image-url("icons/error.svg");
+    out property <image> plug: @image-url("icons/plug.svg");
+    out property <image> bug: @image-url("icons/bug.svg");
+    out property <image> update: @image-url("icons/update.svg");
+    out property <image> captions: @image-url("icons/captions.svg");
+    out property <image> speaker: @image-url("icons/speaker.svg");
+    out property <image> clock: @image-url("icons/clock.svg");
+    out property <image> globe: @image-url("icons/globe.svg");
+    out property <image> person: @image-url("icons/person.svg");
+    out property <image> logs: @image-url("icons/logs.svg");
+    out property <image> mail: @image-url("icons/mail.svg");
+    out property <image> open: @image-url("icons/open.svg");
+    out property <image> dismiss: @image-url("icons/dismiss.svg");
+    out property <image> delete: @image-url("icons/delete.svg");
+    out property <image> filter: @image-url("icons/filter.svg");
+    out property <image> heart: @image-url("icons/heart.svg");
+    out property <image> code: @image-url("icons/code.svg");
+    out property <image> done: @image-url("icons/done.svg");
+    out property <image> logo: @image-url("../assets/icon.svg");
+}
+
+// Tones: 0 idle, 1 busy, 2 ok, 3 warning, 4 error.
+export global Theme {
+    out property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    out property <length> radius: 8px;
+    out property <length> page-padding: 24px;
+    out property <color> muted: Palette.foreground.transparentize(0.4);
+    out property <color> card: dark ? #2b2b2b : #ffffff;
+    out property <color> card-hover: dark ? #323232 : #f5f5f5;
+    out property <color> sidebar: dark ? #1c1c1c : #eeeeee;
+    out property <color> content: dark ? #202020 : #f7f7f7;
+    out property <color> border: dark ? #ffffff14 : #0000001a;
+    out property <color> ok: dark ? #3fb950 : #1a7f37;
+    out property <color> warn: dark ? #d29922 : #9a6700;
+    out property <color> error: dark ? #f85149 : #cf222e;
+    out property <color> busy: Palette.accent-background;
+    out property <color> idle: dark ? #8b949e : #6e7781;
+    out property <color> brand: #6d28d9;
+
+    public pure function tone-color(tone: int) -> color {
+        if tone == 1 { return busy; }
+        if tone == 2 { return ok; }
+        if tone == 3 { return warn; }
+        if tone == 4 { return error; }
+        return idle;
+    }
+}

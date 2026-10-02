@@ -1,0 +1,134 @@
+import { Button, Switch, ScrollView, Palette } from "std-widgets.slint";
+import { Theme, Icons } from "theme.slint";
+import { AppState, PlayerRow } from "state.slint";
+import { Card, PageHeader, Glyph, Badge, Note, SettingRow } from "components.slint";
+
+component PlayerCard inherits Card {
+    in property <PlayerRow> player;
+    in property <int> index;
+
+    HorizontalLayout {
+        spacing: 14px;
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 44px;
+                height: 44px;
+                border-radius: 10px;
+                background: (root.player.status >= 2 ? Palette.accent-background : Theme.idle).transparentize(0.85);
+                Glyph {
+                    source: Icons.play;
+                    size: 22px;
+                    color: root.player.status >= 2 ? Palette.accent-background : Theme.idle;
+                }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            spacing: 4px;
+            HorizontalLayout {
+                spacing: 8px;
+                Text {
+                    text: root.player.name;
+                    font-size: 16px;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Badge {
+                        text: root.player.status == 3 ? @tr("Plugin installed")
+                            : root.player.status == 2 ? @tr("Found on this computer")
+                            : root.player.status == 1 ? @tr("{} copy", root.player.detail)
+                            : @tr("Not found");
+                        tone: root.player.status == 3 ? Theme.ok : root.player.status == 2 ? Palette.accent-background
+                            : root.player.status == 1 ? Theme.warn : Theme.idle;
+                    }
+                }
+                Rectangle { horizontal-stretch: 1; }
+            }
+            Text {
+                text: root.player.status == 1
+                    ? @tr("Players installed from {} run in a sandbox and cannot start SubMagician. Install the player from your distribution's packages to use the plugin.", root.player.detail)
+                    : root.player.status == 0 ? @tr("Install {} first, or install the plugin anyway if it is somewhere SubMagician does not look.", root.player.name)
+                    : root.player.kind == 2 ? @tr("In VLC open View → SubMagician: it finds a subtitle for the video that is playing and stays on until VLC closes.")
+                    : @tr("Press Alt+S while a video plays; Alt+Shift+S searches again even when it has one.");
+                font-size: 12px;
+                color: Theme.muted;
+                wrap: word-wrap;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                spacing: 8px;
+                if root.player.status == 3: Button {
+                    text: @tr("Remove");
+                    icon: Icons.delete;
+                    colorize-icon: true;
+                    clicked => { AppState.remove-player(root.index); }
+                }
+                if root.player.status != 3 && root.player.status != 1: Button {
+                    text: @tr("Install plugin");
+                    icon: Icons.plug;
+                    colorize-icon: true;
+                    primary: root.player.status == 2;
+                    enabled: AppState.cli-found;
+                    clicked => { AppState.install-player(root.index); }
+                }
+            }
+        }
+    }
+}
+
+export component PlayersPage inherits VerticalLayout {
+    padding: Theme.page-padding;
+    spacing: 16px;
+
+    PageHeader {
+        title: @tr("Player plugins");
+        subtitle: @tr("Get subtitles without leaving your player.");
+        Button {
+            text: @tr("Look again");
+            icon: Icons.refresh;
+            colorize-icon: true;
+            clicked => { AppState.refresh-players(); }
+        }
+    }
+
+    ScrollView {
+        VerticalLayout {
+            spacing: 12px;
+            padding-right: 12px;
+            alignment: start;
+
+            Note {
+                text: @tr("A plugin adds SubMagician to your player: it finds a subtitle for the video you are watching in your languages (Settings → Subtitles), syncs it to the audio and loads it. It uses SubMagician's settings and sources, so nothing else needs setting up.");
+            }
+
+            if !AppState.cli-found: Note {
+                icon: Icons.warning;
+                tone: Theme.warn;
+                text: @tr("The SubMagician command-line tool (submagician-cli) is not next to this app, so plugins cannot be installed. Install SubMagician with its installer or package.");
+            }
+
+            for player[i] in AppState.players: PlayerCard {
+                player: player;
+                index: i;
+            }
+
+            Card {
+                SettingRow {
+                    title: @tr("Find subtitles automatically");
+                    description: @tr("When a video starts without a subtitle in your first language, the plugin gets one by itself. Off: only when you ask (Alt+S in mpv, View → SubMagician in VLC).");
+                    Switch {
+                        accessible-label: @tr("Find subtitles automatically");
+                        checked: AppState.player-auto;
+                        toggled => { AppState.set-player-auto(self.checked); }
+                    }
+                }
+            }
+        }
+    }
+}
