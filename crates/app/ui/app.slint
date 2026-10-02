@@ -61,7 +61,7 @@ export global Texts {
     // 11 search finished (a = videos with candidates, b = videos searched), 12 reading audio (a = %),
     // 13 synced (a/b = speech match before/after %, detail = shift), 14 no ffmpeg,
     // 15 timing already fits (a = speech match %), 16 shifted (a = ms, detail = file), 17 nothing to sync,
-    // 18 search cache cleared, 19 file-manager entry added, 20 removed
+    // 18 search cache cleared, 19 file-manager entry added, 20 removed, 21 watch: new video (detail)
     public pure function status(kind: int, a: int, b: int, detail: string) -> string {
         if kind == 1 { return @tr("Scanning folder…"); }
         if kind == 2 { return @tr("Found {} videos.", a); }
@@ -84,6 +84,7 @@ export global Texts {
         if kind == 18 { return @tr("Search cache cleared."); }
         if kind == 19 { return @tr("\"Find subtitles with SubMagician\" is now in the file manager's menu."); }
         if kind == 20 { return @tr("Removed from the file manager's menu."); }
+        if kind == 21 { return @tr("New video in the folder: {}", detail); }
         return @tr("Ready.");
     }
 }
@@ -297,6 +298,8 @@ export component AppWindow inherits Window {
     callback shift(int, int);
     callback clear-cache();
     callback set-menu(bool);
+    callback toggle-watch(bool);
+    in-out property <bool> watch;
     in property <bool> menu-installed;
     callback play(int);
     callback reveal(int);
@@ -333,6 +336,12 @@ export component AppWindow inherits Window {
                             clicked => { root.stop(); }
                         }
                         Rectangle { horizontal-stretch: 1; }
+                        CheckBox {
+                            text: @tr("Watch folder");
+                            enabled: root.folder != "";
+                            checked <=> root.watch;
+                            toggled => { root.toggle-watch(self.checked); }
+                        }
                         CheckBox {
                             text: @tr("Include subfolders");
                             enabled: !root.busy;

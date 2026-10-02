@@ -35,6 +35,8 @@ pub struct Settings {
     pub use_addic7ed: bool,
     /// Overrides the built-in SubDL key.
     pub subdl_api_key: String,
+    /// Watch the open folder and handle new videos automatically.
+    pub watch: bool,
 }
 
 impl Default for Settings {
@@ -53,6 +55,7 @@ impl Default for Settings {
             use_subdl: true,
             use_addic7ed: true,
             subdl_api_key: String::new(),
+            watch: false,
         }
     }
 }
