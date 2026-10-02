@@ -100,3 +100,19 @@ Numbered, newest last. Each: what, and why.
     behind it and leave the window looking frozen. The app logs to `submagician.log` in its data
     folder (replaced at each start, panics included) because a Windows release build has no
     console.
+36. **Whisper through `whisper-rs` (whisper.cpp), behind the core feature `whisper`.** Runs on the
+    CPU on all platforms with no Python or service; CMake builds it. The app and CLI turn the
+    feature on; core can still be built without it.
+37. **Models are downloaded on request, not shipped** (75 MB … 550 MB): the quantized medium and
+    large-v3-turbo give most of the accuracy at a third of the size. Files are checked for the
+    ggml magic before they are used.
+38. **Audio in ~10 minute pieces cut at the quietest 200 ms of their last 30 s**, so memory stays
+    small on long films and no word is split between pieces; the detected language of the first
+    piece is kept for the rest.
+39. **Segment times snapped onto speech with WebRTC VAD** inside each segment: Whisper starts a
+    segment where the previous one (or its window) ended, often seconds before the first word.
+40. **Language**: an English target uses Whisper's translation (any language → English); other
+    targets get the spoken language, saved under that language's code, because Whisper cannot
+    translate into other languages.
+41. **The raw abort callback, not `set_abort_callback_safe`**: whisper-rs 0.16 calls the safe
+    closure through the wrong type (undefined behaviour that aborted runs at random here).

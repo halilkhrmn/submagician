@@ -23,7 +23,9 @@ const SENTENCES: &[(i64, &str)] = &[
 
 #[test]
 fn writes_down_synthetic_speech() {
-    let Some(model) = std::env::var_os("SUBMAGICIAN_WHISPER_MODEL").map(PathBuf::from) else { return };
+    let Some(model) = std::env::var_os("SUBMAGICIAN_WHISPER_MODEL").filter(|v| !v.is_empty()).map(PathBuf::from) else {
+        return;
+    };
     let Some(ffmpeg) = audio::find_ffmpeg(None) else { panic!("ffmpeg is needed for the whisper test") };
     let dir = std::env::temp_dir().join(format!("submagician-whisper-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
