@@ -108,7 +108,7 @@ fn parse_clock(s: &str) -> Option<i64> {
     Some(seconds * 1000 + ms)
 }
 
-fn fmt_clock(ms: i64, sep: char) -> String {
+pub(crate) fn fmt_clock(ms: i64, sep: char) -> String {
     let (h, rest) = (ms / 3_600_000, ms % 3_600_000);
     format!("{h:02}:{:02}:{:02}{sep}{:03}", rest / 60_000, rest / 1000 % 60, rest % 1000)
 }

@@ -146,7 +146,7 @@ pub fn extract_speech(
 }
 
 /// `  Duration: 01:23:45.67, start: …` → milliseconds.
-fn parse_duration(line: &str) -> Option<i64> {
+pub(crate) fn parse_duration(line: &str) -> Option<i64> {
     let rest = line.trim_start().strip_prefix("Duration:")?.trim_start();
     let clock = rest.split(',').next()?;
     let (hms, frac) = clock.split_once('.').unwrap_or((clock, "0"));

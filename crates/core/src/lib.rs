@@ -18,6 +18,8 @@ pub mod probe;
 pub mod provider;
 pub mod score;
 pub mod settings;
+#[cfg(feature = "whisper")]
+pub mod speech;
 pub mod sync;
 pub mod text;
 pub mod timing;
