@@ -2,13 +2,17 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod controller;
+#[cfg(target_os = "linux")]
+mod wayland_drop;
 
 slint::include_modules!();
 
 /// Folders and videos dropped on the window open like "Choose folder…". winit reports drops on
-/// Windows, X11 and macOS; on Wayland it has no drop support yet.
+/// Windows, X11 and macOS; Wayland is handled by `wayland_drop`.
 fn accept_dropped_files(ui: &AppWindow, controller: controller::Controller) {
     use slint::winit_030::{EventResult, WinitWindowAccessor, winit};
+    #[cfg(target_os = "linux")]
+    accept_wayland_drops(ui, controller.clone());
     let last: std::cell::RefCell<Option<std::time::Instant>> = Default::default();
     ui.window().on_winit_window_event(move |_, event| {
         if let winit::event::WindowEvent::DroppedFile(path) = event {
@@ -22,6 +26,31 @@ fn accept_dropped_files(ui: &AppWindow, controller: controller::Controller) {
             }
         }
         EventResult::Propagate
+    });
+}
+
+/// Under Wayland, listen for drops on winit's connection ourselves (see `wayland_drop`). The
+/// winit window exists only once the event loop runs, hence the timer.
+#[cfg(target_os = "linux")]
+fn accept_wayland_drops(ui: &AppWindow, controller: controller::Controller) {
+    use slint::winit_030::WinitWindowAccessor;
+    use slint::winit_030::winit::raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
+    let weak = ui.as_weak();
+    slint::Timer::single_shot(std::time::Duration::from_millis(300), move || {
+        let Some(ui) = weak.upgrade() else { return };
+        let display = ui.window().with_winit_window(|w| match w.display_handle().map(|h| h.as_raw()) {
+            Ok(RawDisplayHandle::Wayland(d)) => Some(d.display.as_ptr()),
+            _ => None,
+        });
+        let Some(Some(display)) = display else { return };
+        let started = wayland_drop::start(display, move |path| {
+            let c = controller.clone();
+            let _ = slint::invoke_from_event_loop(move || c.open_path(path));
+        });
+        match started {
+            Ok(()) => log::info!("Wayland drops enabled"),
+            Err(e) => log::warn!("Wayland drops not available: {e}"),
+        }
     });
 }
 
