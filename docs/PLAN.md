@@ -25,9 +25,9 @@ APIs where a site has one, scraping only where it has none. Every source sits be
 |---|---|---|
 | OpenSubtitles.com | REST API, application key built in (like VLSub) | nothing; optional login raises the daily limit |
 | SubDL | API, application key built in | nothing |
-| Podnapisi | site JSON search | nothing |
-| Addic7ed (TV) | via Gestdown | nothing |
-| Turkish sites (Türkçealtyazı, …) | scraping, rate-limited, cached | nothing |
+| Podnapisi | XML search interface (as subliminal) | nothing |
+| Addic7ed (TV) | via Gestdown's public API | nothing |
+| Turkish sites (Türkçealtyazı, PlanetDP) | need a browser engine (see Phase 3 notes) | — |
 
 ## Phases
 
@@ -63,9 +63,13 @@ APIs where a site has one, scraping only where it has none. Every source sits be
 
 ### Phase 3 — More sources
 - SubDL, Podnapisi, Addic7ed (Gestdown) providers.
-- Turkish site scrapers (polite: rate limit, cache, clear User-Agent).
-- RAR support for archives from Turkish sites.
-- Search cache (SQLite) so re-opening a folder does not re-query; provider on/off in settings.
+- RAR and 7z archives (through bsdtar / 7-Zip / unrar).
+- Search cache on disk so re-opening a folder does not re-query; provider on/off in settings.
+- Turkish sites: **not doable with plain HTTP**. Türkçealtyazı answers every request with a
+  Cloudflare JavaScript challenge ("Just a moment…", `cf-mitigated: challenge`); PlanetDP's
+  search ignores the query without its JavaScript and form token. Scraping them needs a real
+  browser engine (a hidden system WebView: WebView2 on Windows, WebKitGTK on Linux) that
+  passes the challenge and hands the page to the parser. Decision pending (see PROGRESS).
 
 ### Phase 4 — Convenience
 - Embedded subtitle tracks (ffprobe): skip videos that already carry the wanted language.

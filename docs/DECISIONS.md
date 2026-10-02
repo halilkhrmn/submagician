@@ -51,3 +51,20 @@ Numbered, newest last. Each: what, and why.
 17. **Synced and shifted subtitles are rewritten in place** (UTF-8 BOM, CRLF, atomic). The
     download step's `.bak` keeps the file that was there before, if any; manual ± steps undo a
     shift. Speech spans are cached per video for the session.
+18. **`Candidate.provider` is a `String`** so candidates can be stored in the search cache.
+19. **Search cache as JSON files, not SQLite.** One file per provider and query (FNV-1a of the
+    query as name) in the OS cache folder; found results kept 3 days, empty ones 12 hours (new
+    releases get subtitles within hours). No C library and nothing to migrate. "Search again"
+    skips it; Settings can clear it.
+20. **RAR/7z through an external tool**, not a library: the unRAR source license is not
+    free-software compatible (AGPL), and no mature pure-Rust RAR reader exists. Order: `bsdtar`,
+    `tar` if it is bsdtar (Windows 10+ ships one as `tar.exe`), `7z`/`7za`, `unrar`.
+21. **Addic7ed through Gestdown's API**, not by scraping addic7ed.com: Gestdown mirrors it with
+    JSON, no key, and handles Addic7ed's rate limits. The show is picked by title similarity plus
+    a "(US)"/"(2005)" tag found in the file name, then by having the season.
+22. **SubDL is only added when it has a key** (built in or from Settings), so a missing key
+    never stops a batch run.
+23. **Podnapisi via its XML interface** (`/subtitles/search/old?sXML=1`), the one subliminal
+    uses. Not verified live: podnapisi.net was unreachable from the development environment.
+24. **No plain-HTTP scrapers for Türkçealtyazı and PlanetDP** (see Phase 3 in PLAN): both need
+    JavaScript, so a parser alone would never get past the first request.

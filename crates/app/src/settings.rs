@@ -23,6 +23,12 @@ pub struct Settings {
     pub auto_sync: bool,
     /// ffmpeg to use; empty means look next to the app and on PATH.
     pub ffmpeg_path: String,
+    pub use_opensubtitles: bool,
+    pub use_subdl: bool,
+    pub use_podnapisi: bool,
+    pub use_addic7ed: bool,
+    /// Overrides the built-in SubDL key.
+    pub subdl_api_key: String,
 }
 
 impl Default for Settings {
@@ -38,6 +44,11 @@ impl Default for Settings {
             opensubtitles_api_key: String::new(),
             auto_sync: true,
             ffmpeg_path: String::new(),
+            use_opensubtitles: true,
+            use_subdl: true,
+            use_podnapisi: true,
+            use_addic7ed: true,
+            subdl_api_key: String::new(),
         }
     }
 }
@@ -60,6 +71,11 @@ pub fn system_language() -> Option<String> {
 impl Settings {
     fn path() -> Option<PathBuf> {
         directories::ProjectDirs::from("", "", "SubMagician").map(|d| d.config_dir().join("settings.json"))
+    }
+
+    /// Folder for cached search results.
+    pub fn search_cache_dir() -> Option<PathBuf> {
+        directories::ProjectDirs::from("", "", "SubMagician").map(|d| d.cache_dir().join("search"))
     }
 
     pub fn load() -> Settings {
