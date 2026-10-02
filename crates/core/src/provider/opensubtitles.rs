@@ -341,4 +341,36 @@ mod tests {
         let os = OpenSubtitles::new(None, None);
         assert!(matches!(os.key(), Err(Error::NotConfigured { .. })));
     }
+
+    /// Live check against api.opensubtitles.com with the built-in key; runs only with
+    /// `SUBMAGICIAN_LIVE=1` (CI sets it with the key from the repository secrets). Uses one
+    /// download from the daily limit.
+    #[tokio::test]
+    async fn live_opensubtitles() {
+        if !std::env::var("SUBMAGICIAN_LIVE").is_ok_and(|v| v == "1") {
+            return;
+        }
+        assert!(BUILT_IN_KEY.is_some(), "build with SUBMAGICIAN_OPENSUBTITLES_API_KEY for the live test");
+        let os = OpenSubtitles::new(None, None);
+        let file = "Inception.2010.1080p.BluRay.x264-SPARKS.mkv";
+        let q = SearchQuery {
+            file_name: file.into(),
+            size: 0,
+            hash: None,
+            name: crate::name::parse(file),
+            languages: vec!["en".into(), "tr".into()],
+        };
+        let found = os.search(&q).await.unwrap();
+        eprintln!("OpenSubtitles: {} results, first: {:?}", found.len(), found.first().map(|c| &c.release));
+        assert!(found.iter().any(|c| c.language == "tr"), "no Turkish subtitle for Inception?");
+        match os.download(&found[0]).await {
+            Ok(d) => {
+                eprintln!("downloaded {} ({} left today)", d.files[0].name, d.remaining.unwrap_or(-1));
+                assert!(String::from_utf8_lossy(&d.files[0].bytes).contains("-->"));
+            }
+            // The anonymous daily limit is per IP; a busy CI address may have used it up.
+            Err(Error::Quota { message, .. }) => eprintln!("download limit reached: {message}"),
+            Err(e) => panic!("download failed: {e}"),
+        }
+    }
 }

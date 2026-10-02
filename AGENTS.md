@@ -44,7 +44,7 @@ and `libxkbcommon-dev` (runtime: `libxkbcommon-x11-0` on X11). Syncing to audio 
 | What | Command |
 |---|---|
 | All tests | `cargo test --all` (audio tests need ffmpeg with flite, the 7z test bsdtar; `SUBMAGICIAN_REQUIRE_FFMPEG=1` / `SUBMAGICIAN_REQUIRE_BSDTAR=1` make a skip fail) |
-| Live provider tests | `SUBMAGICIAN_LIVE=1 cargo test -p submagician-core live_` |
+| Live provider tests | `SUBMAGICIAN_LIVE=1 cargo test -p submagician-core live_ -- --nocapture` (needs the provider keys at build time; CI job `live` runs them with the secrets) |
 | Lint | `cargo clippy --all-targets -- -D warnings` and `cargo fmt --all --check` |
 | Run | `cargo run -p submagician` |
 | Run with an OpenSubtitles key | `SUBMAGICIAN_OPENSUBTITLES_API_KEY=… cargo run -p submagician` |

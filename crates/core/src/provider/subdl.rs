@@ -229,4 +229,28 @@ mod tests {
         }
         assert!(SubDl::new(Some("k".into())).is_some());
     }
+
+    /// Live check against api.subdl.com with the built-in key; runs only with
+    /// `SUBMAGICIAN_LIVE=1` (CI sets it with the key from the repository secrets).
+    #[tokio::test]
+    async fn live_subdl() {
+        if !std::env::var("SUBMAGICIAN_LIVE").is_ok_and(|v| v == "1") {
+            return;
+        }
+        let subdl = SubDl::new(None).expect("build with SUBMAGICIAN_SUBDL_API_KEY for the live test");
+        let file = "Inception.2010.1080p.BluRay.x264-SPARKS.mkv";
+        let q = SearchQuery {
+            file_name: file.into(),
+            size: 0,
+            hash: None,
+            name: crate::name::parse(file),
+            languages: vec!["tr".into(), "en".into()],
+        };
+        let found = subdl.search(&q).await.unwrap();
+        eprintln!("SubDL: {} results, first: {:?}", found.len(), found.first().map(|c| (&c.language, &c.release)));
+        assert!(!found.is_empty());
+        let d = subdl.download(&found[0]).await.unwrap();
+        eprintln!("downloaded {}", d.files[0].name);
+        assert!(String::from_utf8_lossy(&d.files[0].bytes).contains("-->"));
+    }
 }

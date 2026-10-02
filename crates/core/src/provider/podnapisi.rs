@@ -186,4 +186,27 @@ mod tests {
     fn bad_xml_is_an_error() {
         assert!(parse("<html>").is_err());
     }
+
+    /// Live check against podnapisi.net; runs only with `SUBMAGICIAN_LIVE=1`.
+    #[tokio::test]
+    async fn live_podnapisi() {
+        if !std::env::var("SUBMAGICIAN_LIVE").is_ok_and(|v| v == "1") {
+            return;
+        }
+        let p = Podnapisi::new();
+        let file = "Inception.2010.1080p.BluRay.x264-SPARKS.mkv";
+        let q = SearchQuery {
+            file_name: file.into(),
+            size: 0,
+            hash: None,
+            name: crate::name::parse(file),
+            languages: vec!["en".into()],
+        };
+        let found = p.search(&q).await.unwrap();
+        eprintln!("Podnapisi: {} results, first: {:?}", found.len(), found.first().map(|c| &c.release));
+        assert!(!found.is_empty());
+        let d = p.download(&found[0]).await.unwrap();
+        eprintln!("downloaded {}", d.files[0].name);
+        assert!(String::from_utf8_lossy(&d.files[0].bytes).contains("-->"));
+    }
 }

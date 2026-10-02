@@ -49,3 +49,19 @@ jobs:
             target/release/submagician
             target/release/submagician.exe
           if-no-files-found: error
+
+  # Real searches and downloads against the providers, with the application keys from the
+  # repository secrets. Shown as its own check; a provider being down does not fail CI.
+  live:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Live provider tests
+        env:
+          SUBMAGICIAN_LIVE: "1"
+          SUBMAGICIAN_OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
+          SUBMAGICIAN_SUBDL_API_KEY: ${{ secrets.SUBDL_API_KEY }}
+        run: cargo test -p submagician-core live_ -- --nocapture --test-threads 1

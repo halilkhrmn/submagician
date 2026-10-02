@@ -298,7 +298,7 @@ mod tests {
 
     /// Live check against api.gestdown.info; runs only with `SUBMAGICIAN_LIVE=1`.
     #[tokio::test]
-    async fn live_search_and_download() {
+    async fn live_gestdown() {
         if !std::env::var("SUBMAGICIAN_LIVE").is_ok_and(|v| v == "1") {
             return;
         }
