@@ -16,11 +16,20 @@
   - [ ] Try on real films with base/small models (speed and quality on a normal PC)
 - [x] Phase 6 — Packaging, updates, logs, new interface, player plugins, fast sync
   - [ ] First release run on GitHub (installer and packages built and smoke-tested in CI)
-  - [ ] In-app update tried for real (needs a public release: the repository is private)
+  - [ ] In-app update tried for real (the repository is public now; needs a second release)
   - [ ] VLC extension tried in VLC (mpv script tried end to end; VLC only syntax-checked)
 - [ ] Phase 7 — macOS
 
 ## Work log
+
+### 2026-10-03 — Website and new logo
+- Done: `site/` landing page (minimal: logo, one line, a download button that picks the file for
+  the visitor's system from the newest release, a screenshot, three features), Pages workflow;
+  new logo (a video frame with two subtitle lines) as the app icon too; README links the site;
+  "1 subtitle found" singular.
+- Verified: rendered in Chromium (light, dark, phone width); download button tested with a mocked
+  release for Windows, Linux, macOS and Android user agents.
+- Open: switch Pages on once (Settings → Pages → Source: GitHub Actions).
 
 ### 2026-10-02 — Phase 6: packaging, updates, logs, new interface, plugins, fast sync
 - Done: `core::applog` (errors.log always, daily files on request, panics), `update` (GitHub

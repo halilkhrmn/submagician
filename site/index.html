@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SubMagician — the right subtitle for every video</title>
+<meta name="description" content="SubMagician finds the subtitle made for your video, fixes its text and syncs it to the audio in seconds. Free and open source, for Windows and Linux.">
+<meta property="og:title" content="SubMagician">
+<meta property="og:description" content="The right subtitle for every video. Found, fixed and synced in seconds.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://halilkhrmn.github.io/submagician/">
+<meta property="og:image" content="https://halilkhrmn.github.io/submagician/screenshots/library.png">
+<meta property="og:image:width" content="1240">
+<meta property="og:image:height" content="780">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f0d14">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.ico" sizes="any">
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #16131d;
+    --muted: #6b6578;
+    --line: #ece9f1;
+    --accent: #6d28d9;
+    --accent-fg: #ffffff;
+    --shadow: 0 30px 80px -30px rgba(76, 29, 149, 0.35);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f0d14;
+      --fg: #f3f1f7;
+      --muted: #a29cb0;
+      --line: #241f2e;
+      --accent: #7c3aed;
+      --shadow: 0 30px 80px -30px rgba(139, 92, 246, 0.35);
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+
+  nav { display: flex; align-items: center; justify-content: space-between; padding: 22px 0; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 17px; letter-spacing: -0.01em; text-decoration: none; }
+  .brand img { width: 30px; height: 30px; }
+  .hero img.logo { width: 96px; height: 96px; margin-bottom: 16px; }
+  nav .links a { color: var(--muted); text-decoration: none; margin-left: 22px; font-size: 15px; }
+  nav .links a:hover { color: var(--fg); }
+
+  .hero { text-align: center; padding: 64px 0 40px; }
+  h1 {
+    margin: 0 auto;
+    max-width: 14ch;
+    font-size: clamp(38px, 6.5vw, 64px);
+    line-height: 1.05;
+    letter-spacing: -0.035em;
+    font-weight: 750;
+  }
+  .lead { margin: 20px auto 0; max-width: 36ch; color: var(--muted); font-size: clamp(17px, 2.2vw, 20px); }
+  .cta { margin-top: 34px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .button {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 15px 28px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--accent-fg);
+    font-weight: 600;
+    font-size: 17px;
+    text-decoration: none;
+    transition: transform .15s ease, box-shadow .15s ease;
+    box-shadow: 0 10px 30px -12px var(--accent);
+  }
+  .button:hover { transform: translateY(-1px); box-shadow: 0 14px 34px -12px var(--accent); }
+  .button svg { width: 18px; height: 18px; }
+  .button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+  @media (prefers-reduced-motion: reduce) { .button { transition: none; } .button:hover { transform: none; } }
+  .meta { font-size: 13px; color: var(--muted); min-height: 1.6em; }
+  .others { font-size: 14px; color: var(--muted); }
+  .others a { color: var(--muted); }
+  .others a:hover { color: var(--fg); }
+
+  .shot { margin: 56px auto 0; max-width: 980px; }
+  .shot img {
+    display: block; width: 100%; height: auto;
+    border-radius: 14px;
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow);
+  }
+
+  .features {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 36px;
+    padding: 96px 0 72px;
+  }
+  .features h2 { font-size: 18px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .features p { margin: 0; color: var(--muted); font-size: 15px; }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 28px 0 40px;
+    display: flex; flex-wrap: wrap; gap: 8px 22px; justify-content: space-between;
+    color: var(--muted); font-size: 14px;
+  }
+  footer a { color: var(--muted); text-decoration: none; }
+  footer a:hover { color: var(--fg); }
+  footer .links a { margin-left: 18px; white-space: nowrap; }
+
+  @media (max-width: 760px) {
+    .hero { padding: 40px 0 24px; }
+    .features { grid-template-columns: 1fr; gap: 24px; padding: 64px 0 48px; }
+    nav .links a.hide-sm { display: none; }
+    footer .links a { margin: 0 18px 0 0; }
+  }
+  @media (max-width: 359px) {
+    .button { padding: 14px 20px; font-size: 16px; white-space: nowrap; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav>
+  <a class="brand" href="./"><img src="logo.svg" alt="">SubMagician</a>
+  <div class="links">
+    <a class="hide-sm" href="#features">Features</a>
+    <a href="https://github.com/halilkhrmn/submagician">GitHub</a>
+  </div>
+</nav>
+
+<main>
+<header class="hero">
+  <img class="logo" src="logo.svg" alt="">
+  <h1>The right subtitle for every video.</h1>
+  <p class="lead">Found, fixed and synced to the audio in seconds. Free and open source.</p>
+  <div class="cta">
+    <!-- Filled in by the script below with the newest release for the visitor's system. -->
+    <a class="button" id="download" href="https://github.com/halilkhrmn/submagician/releases/latest">
+      <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 2.5a.75.75 0 0 1 .75.75v8.69l2.72-2.72a.75.75 0 1 1 1.06 1.06l-4 4a.75.75 0 0 1-1.06 0l-4-4a.75.75 0 1 1 1.06-1.06l2.72 2.72V3.25A.75.75 0 0 1 10 2.5ZM3.75 15.5a.75.75 0 0 0 0 1.5h12.5a.75.75 0 0 0 0-1.5H3.75Z"/></svg>
+      <span id="download-label">Download</span>
+    </a>
+    <span class="meta" id="meta">For Windows and Linux</span>
+    <span class="others" id="others"><a href="https://github.com/halilkhrmn/submagician/releases/latest">All downloads</a></span>
+  </div>
+</header>
+
+<figure class="shot">
+  <img src="screenshots/library.png" width="1240" height="780" alt="SubMagician: a folder of episodes, each with its subtitle saved">
+</figure>
+
+<section class="features" id="features" aria-label="Features">
+  <div>
+    <h2>Picks the right one</h2>
+    <p>Every subtitle from OpenSubtitles, SubDL and Addic7ed is scored against your exact file, not just its name.</p>
+  </div>
+  <div>
+    <h2>Synced to the audio</h2>
+    <p>Offset, frame rate and cut scenes are fixed from the speech. Subtitles inside the video can be used too.</p>
+  </div>
+  <div>
+    <h2>Works in your player</h2>
+    <p>One click adds SubMagician to mpv and VLC. Press a key and the subtitle appears.</p>
+  </div>
+</section>
+</main>
+
+<footer>
+  <span>SubMagician · AGPL-3.0</span>
+  <span class="links">
+    <a href="https://github.com/halilkhrmn/submagician">Source</a>
+    <a href="https://github.com/halilkhrmn/submagician/releases">Releases</a>
+    <a href="https://github.com/halilkhrmn/submagician/issues">Report a problem</a>
+  </span>
+</footer>
+
+</div>
+<script>
+// Newest release from the GitHub API and the file that fits the visitor's system. Without the
+// API (offline, rate limit) the button simply opens the releases page.
+(async function () {
+  var repo = "halilkhrmn/submagician";
+  var ua = navigator.userAgent;
+  var uad = navigator.userAgentData;
+  var arm = /aarch64|arm64|armv\d/i.test(ua);
+  var os = /Windows/.test(ua) ? "windows"
+    : /Android|iPhone|iPad|iPod/.test(ua) || (uad && uad.mobile) ? "mobile"
+    // iPadOS reports itself as a Mac; real Macs have no touch screen.
+    : /Macintosh/.test(ua) && navigator.maxTouchPoints > 1 ? "mobile"
+    : /Macintosh|Mac OS X/.test(ua) ? "mac"
+    // The Linux builds are x86_64 only.
+    : /Linux|CrOS/.test(ua) && !arm ? "linux" : "other";
+  var button = document.getElementById("download");
+  var label = document.getElementById("download-label");
+  var meta = document.getElementById("meta");
+  var others = document.getElementById("others");
+  var rel;
+  try {
+    var r = await fetch("https://api.github.com/repos/" + repo + "/releases/latest");
+    if (!r.ok) return;
+    rel = await r.json();
+  } catch (e) {
+    return;
+  }
+  var version = String(rel.tag_name || "").replace(/^v/, "");
+  var find = function (re) {
+    return (rel.assets || []).filter(function (a) { return re.test(a.name); })[0];
+  };
+  var setup = find(/^submagician-setup-.*\.exe$/i);
+  var portable = find(/-windows-x64-portable\.zip$/i);
+  var appimage = find(/\.AppImage$/i);
+  var deb = find(/_amd64\.deb$/i);
+  var mb = function (a) { return Math.round(a.size / 1048576) + " MB"; };
+  var offer = function (name, asset, note) {
+    label.textContent = "Download for " + name;
+    button.href = asset.browser_download_url;
+    meta.textContent = "Version " + version + " · " + mb(asset) + (note ? " · " + note : "");
+  };
+  var links = [
+    ["Windows installer", setup && setup.browser_download_url],
+    ["Windows portable", portable && portable.browser_download_url],
+    ["Linux AppImage", appimage && appimage.browser_download_url],
+    ["Debian / Ubuntu", deb && deb.browser_download_url],
+    ["Release notes", rel.html_url]
+  ].filter(function (l) { return l[1]; });
+  others.textContent = "";
+  links.forEach(function (l, i) {
+    if (i) others.appendChild(document.createTextNode(" · "));
+    var a = document.createElement("a");
+    a.href = l[1];
+    a.textContent = l[0];
+    others.appendChild(a);
+  });
+
+  if (os === "windows" && setup) {
+    offer("Windows", setup);
+  } else if (os === "linux" && appimage) {
+    offer("Linux", appimage, "AppImage");
+  } else if (os === "mac") {
+    label.textContent = "Download";
+    meta.textContent = "Version " + version + " · Windows and Linux for now, macOS is on the way";
+  } else if (os === "mobile") {
+    label.textContent = "Download";
+    meta.textContent = "Version " + version + " · An app for Windows and Linux computers";
+  } else {
+    label.textContent = "Download " + version;
+    meta.textContent = "For Windows and Linux";
+  }
+})();
+</script>
+</body>
+</html>

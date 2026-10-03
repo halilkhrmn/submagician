@@ -9,7 +9,8 @@ encoding and the timing, and saves it next to the video. Windows and Linux (macO
 
 ## Download
 
-From the [releases page](https://github.com/halilkhrmn/submagician/releases):
+From the [website](https://halilkhrmn.github.io/submagician/) or the
+[releases page](https://github.com/halilkhrmn/submagician/releases):
 
 - **Windows**: `submagician-setup-….exe` (no admin rights needed, ffmpeg included), or the
   portable zip.
