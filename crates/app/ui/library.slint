@@ -145,7 +145,7 @@ component DetailsPanel inherits VerticalLayout {
                 icon-size: 28px;
                 title: AppState.files[index].state == 0 ? @tr("Not searched yet") : @tr("No subtitles found");
                 subtitle: AppState.files[index].state == 0 ? @tr("Selecting a video searches for it.")
-                    : @tr("Try \"Search as…\" with the show or film name, or write one from the audio.");
+                    : @tr("Try \"Search as…\" with the show or film name, or write one from the speech.");
             }
             ListView {
                 for row[i] in AppState.candidates: CandidateCard {
@@ -159,10 +159,16 @@ component DetailsPanel inherits VerticalLayout {
                 }
             }
         }
+        Text {
+            text: @tr("None fits? \"Write from speech\" listens to the video and writes the subtitle itself, on this computer (a few minutes).");
+            font-size: 11px;
+            color: Theme.muted;
+            wrap: word-wrap;
+        }
         HorizontalLayout {
             spacing: 8px;
             Button {
-                text: @tr("From audio");
+                text: @tr("Write from speech");
                 icon: Icons.mic;
                 colorize-icon: true;
                 enabled: !AppState.busy;
@@ -182,6 +188,12 @@ component DetailsPanel inherits VerticalLayout {
 
     if has-file && has-subtitle: Card {
         inner-spacing: 8px;
+        Text {
+            text: @tr("Out of sync? \"Sync to audio\" listens to the video and fixes the timing. \"Copy timing…\" takes it from another subtitle file that is in sync.");
+            font-size: 11px;
+            color: Theme.muted;
+            wrap: word-wrap;
+        }
         HorizontalLayout {
             spacing: 6px;
             Button {
@@ -193,7 +205,7 @@ component DetailsPanel inherits VerticalLayout {
                 clicked => { AppState.sync-audio(index); }
             }
             Button {
-                text: @tr("To a subtitle…");
+                text: @tr("Copy timing…");
                 icon: Icons.sync;
                 colorize-icon: true;
                 horizontal-stretch: 1;
