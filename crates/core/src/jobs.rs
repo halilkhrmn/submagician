@@ -136,6 +136,14 @@ pub fn run(job: &Job, cancel: Arc<AtomicBool>, progress: Progress) -> Result<Don
 
 /// The worker side: runs the job given as JSON and prints the events.
 pub fn serve(json: &str) -> bool {
+    // The app keeps our stdin open while it waits for us; when it is gone, so are we.
+    std::thread::spawn(|| {
+        let mut sink = [0u8; 64];
+        let mut stdin = std::io::stdin();
+        while matches!(std::io::Read::read(&mut stdin, &mut sink), Ok(n) if n > 0) {}
+        log::warn!("the app is gone; stopping");
+        std::process::exit(3);
+    });
     let job: Job = match serde_json::from_str(json) {
         Ok(job) => job,
         Err(e) => {
@@ -193,16 +201,21 @@ pub fn run_in_worker(command: &[String], job: &Job, cancel: Arc<AtomicBool>, pro
     {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
+        // Heavy work must not make the window (or the computer) sluggish.
+        const BELOW_NORMAL_PRIORITY_CLASS: u32 = 0x0000_4000;
+        cmd.creation_flags(CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS);
     }
     let mut child = cmd
         .args(args)
         .arg("--worker")
         .arg(serde_json::to_string(job).expect("serialize"))
-        .stdin(Stdio::null())
+        // A lifeline: the worker stops when this pipe closes, so it never outlives the app,
+        // even when the app is closed or killed in the middle of a job.
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
+    let _lifeline = child.stdin.take();
     let stdout = child.stdout.take().expect("piped stdout");
     let stderr = child.stderr.take().expect("piped stderr");
     // The worker's own log goes into ours; its last lines explain a crash.

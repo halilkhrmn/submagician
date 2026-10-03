@@ -65,6 +65,11 @@
     <binary>submagician-cli</binary>
   </provides>
   <releases>
+    <release version="0.1.3" date="2026-10-03">
+      <description>
+        <p>Writing subtitles from the audio is faster and keeps the computer usable; help inside the buttons; a SubMagician submenu in the right-click menu, which now works on video files on Windows too.</p>
+      </description>
+    </release>
     <release version="0.1.2" date="2026-10-03">
       <description>
         <p>A small ? explains the buttons that need it; more room for the found subtitles; Fedora and Flatpak packages.</p>

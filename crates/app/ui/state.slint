@@ -90,7 +90,8 @@ export global Texts {
     // 32 plugin removed (detail = player), 33 update download (a = %), 34 up to date,
     // 35 report saved (detail = path), 36 taking the subtitle out of the video (a = %),
     // 37 taken out and synced (detail = file, a/b = speech match before/after %),
-    // 38 taken out, timing fits (detail = file, a = speech match %), 39 no ffmpeg/ffprobe for tracks
+    // 38 taken out, timing fits (detail = file, a = speech match %), 39 no ffmpeg/ffprobe for tracks,
+    // 40 the folder is listed again after the running task
     public pure function status(kind: int, a: int, b: int, detail: string) -> string {
         if kind == 1 { return @tr("Scanning folder…"); }
         if kind == 2 && a == 1 { return @tr("Found 1 video."); }
@@ -133,6 +134,7 @@ export global Texts {
         if kind == 37 { return @tr("Took {} out of the video and synced it. Speech match {}% → {}%.", detail, a, b); }
         if kind == 38 { return @tr("Took {} out of the video; its timing already fits ({}% speech match).", detail, a); }
         if kind == 39 { return @tr("ffmpeg and ffprobe are needed to read the subtitles inside videos. Settings → Timing can get them."); }
+        if kind == 40 { return @tr("The folder will be listed again when the current task ends."); }
         return @tr("Ready.");
     }
 
@@ -273,7 +275,14 @@ export global AppState {
     in-out property <bool> menu-open;
     in-out property <bool> menu-get;
     in-out property <bool> menu-sync;
+    in-out property <bool> menu-submenu;
+    in-out property <bool> menu-folders;
+    in-out property <bool> menu-background;
+    in-out property <bool> menu-videos;
+    in-out property <string> menu-extensions;
     callback menu-entries-changed();
+    // Typing in the extensions field (applied after a pause).
+    callback menu-extensions-edited();
 
     // "Download the speech model?" when something needs it.
     in-out property <bool> model-prompt-visible;

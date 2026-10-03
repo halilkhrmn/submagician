@@ -81,6 +81,7 @@ const ST_FROM_VIDEO: i32 = 36;
 const ST_FROM_VIDEO_DONE: i32 = 37;
 const ST_FROM_VIDEO_FITS: i32 = 38;
 const ST_NO_FFMPEG_TRACK: i32 = 39;
+const ST_RESCAN_LATER: i32 = 40;
 
 /// Typed settings are saved once the typing pauses for this long.
 const SAVE_DELAY: Duration = Duration::from_millis(700);
@@ -153,6 +154,8 @@ struct Shared {
     release: Mutex<Option<submagician_core::update::Release>>,
     /// What to do once the folder given on the command line is open (right-click menu).
     after_open: Mutex<Option<integration::Action>>,
+    /// The folder is scanned again once the running task ends (a setting changed meanwhile).
+    rescan_after: AtomicBool,
     /// The video to write from the audio once the speech model the user agreed to is there.
     generate_after_model: Mutex<Option<usize>>,
 }
@@ -216,6 +219,7 @@ impl Controller {
                 watch_tx,
                 release: Mutex::new(None),
                 after_open: Mutex::new(None),
+                rescan_after: AtomicBool::new(false),
                 generate_after_model: Mutex::new(None),
             }),
             ui: ui.as_weak(),
@@ -237,14 +241,7 @@ impl Controller {
         ui.global::<AppState>().set_can_download_ffmpeg(cfg!(windows));
         ui.global::<AppState>().on_rescan({
             let c = c.clone();
-            move || {
-                let files = c.shared.opened_files.lock().unwrap().clone();
-                match (files, c.shared.root.lock().unwrap().clone()) {
-                    (Some(files), _) => c.open_files(files),
-                    (None, Some(root)) => c.open_folder(root),
-                    _ => {}
-                }
-            }
+            move || c.rescan()
         });
         ui.global::<AppState>().on_search_all({
             let c = c.clone();
@@ -316,24 +313,14 @@ impl Controller {
         });
         ui.global::<AppState>().on_menu_entries_changed({
             let c = c.clone();
+            move || c.menu_entries_changed()
+        });
+        let menu_timer = std::rc::Rc::new(slint::Timer::default());
+        ui.global::<AppState>().on_menu_extensions_edited({
+            let c = c.clone();
             move || {
-                let Some(ui) = c.ui.upgrade() else { return };
-                let state = ui.global::<AppState>();
-                {
-                    let mut s = c.shared.settings.lock().unwrap();
-                    s.menu = integration::MenuEntries {
-                        open: state.get_menu_open(),
-                        get: state.get_menu_get(),
-                        sync: state.get_menu_sync(),
-                    };
-                    if let Err(e) = s.save() {
-                        log::warn!("settings not saved: {e}");
-                    }
-                }
-                // Already in the menu: show the new choice there now.
-                if integration::is_installed() {
-                    c.set_menu(true);
-                }
+                let c = c.clone();
+                menu_timer.start(slint::TimerMode::SingleShot, SAVE_DELAY, move || c.menu_entries_changed());
             }
         });
         rt_spawn_watch_worker(&c, watch_rx);
@@ -478,6 +465,47 @@ impl Controller {
         });
     }
 
+    /// Lists the folder (or the opened videos) again, e.g. after "Look in subfolders" changed.
+    /// While a task runs, that happens when it ends.
+    fn rescan(&self) {
+        if self.ui.upgrade().is_some_and(|ui| ui.global::<AppState>().get_busy()) {
+            self.shared.rescan_after.store(true, Ordering::SeqCst);
+            self.status(ST_RESCAN_LATER, 0, 0, "");
+            return;
+        }
+        let files = self.shared.opened_files.lock().unwrap().clone();
+        match (files, self.shared.root.lock().unwrap().clone()) {
+            (Some(files), _) => self.open_files(files),
+            (None, Some(root)) => self.open_folder(root),
+            _ => {}
+        }
+    }
+
+    /// Saves the right-click menu choices and, when the menu is there, rewrites it.
+    fn menu_entries_changed(&self) {
+        let Some(ui) = self.ui.upgrade() else { return };
+        let state = ui.global::<AppState>();
+        {
+            let mut s = self.shared.settings.lock().unwrap();
+            s.menu = integration::MenuEntries {
+                open: state.get_menu_open(),
+                get: state.get_menu_get(),
+                sync: state.get_menu_sync(),
+                submenu: state.get_menu_submenu(),
+                folders: state.get_menu_folders(),
+                background: state.get_menu_background(),
+                videos: state.get_menu_videos(),
+                extensions: state.get_menu_extensions().trim().into(),
+            };
+            if let Err(e) = s.save() {
+                log::warn!("settings not saved: {e}");
+            }
+        }
+        if integration::is_installed() {
+            self.set_menu(true);
+        }
+    }
+
     /// Asks whether to download the speech model chosen in the settings.
     fn ask_for_model(&self) {
         let id = self.shared.settings.lock().unwrap().whisper_model.clone();
@@ -543,9 +571,9 @@ impl Controller {
     /// takes it out.
     fn set_menu(&self, add: bool) {
         let result = if add {
-            let entries = self.shared.settings.lock().unwrap().menu;
+            let entries = self.shared.settings.lock().unwrap().menu.clone();
             match submagician_core::packaging::launch_command() {
-                Some(command) => integration::install(&command, entries),
+                Some(command) => integration::install(&command, &entries),
                 None => Err(Error::Io(std::io::Error::other("cannot find SubMagician's own path"))),
             }
         } else {
@@ -623,6 +651,9 @@ impl Controller {
                 ui.global::<AppState>().set_progress(0.0);
                 // The scan of a folder opened from the right-click menu is done: its action now.
                 c.run_after_open();
+                if c.shared.rescan_after.swap(false, Ordering::SeqCst) {
+                    c.rescan();
+                }
             });
         });
     }
@@ -1551,6 +1582,11 @@ fn apply_settings(ui: &AppWindow, s: &Settings) {
     ui.global::<AppState>().set_menu_open(s.menu.open);
     ui.global::<AppState>().set_menu_get(s.menu.get);
     ui.global::<AppState>().set_menu_sync(s.menu.sync);
+    ui.global::<AppState>().set_menu_submenu(s.menu.submenu);
+    ui.global::<AppState>().set_menu_folders(s.menu.folders);
+    ui.global::<AppState>().set_menu_background(s.menu.background);
+    ui.global::<AppState>().set_menu_videos(s.menu.videos);
+    ui.global::<AppState>().set_menu_extensions(s.menu.extensions.clone().into());
 }
 
 fn read_settings(ui: &AppWindow, s: &mut Settings) {

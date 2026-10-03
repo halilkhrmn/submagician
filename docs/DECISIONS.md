@@ -196,3 +196,14 @@ Numbered, newest last. Each: what, and why.
     plugins, right-click menu) are `flatpak run …`, the worker is the sandboxed tool itself, and
     player/file-manager folders are the host's `~/.config` / `~/.local/share`. The release
     publishes a bundle; Flathub is a manual one-time submission (docs/RELEASING.md).
+59. **Flathub is on hold.** Its rules ask for a development history and forbid AI-written
+    manifests and submission texts; SubMagician is new and its packaging was written with an AI
+    agent. The release's .flatpak bundle covers Flatpak users meanwhile.
+60. **Right-click entries per video extension on Windows**, written with one `reg import` (a few
+    hundred values), not under the "video" perceived type, which extensions no installed app
+    claimed (often .mkv) lack. The submenu uses `MUIVerb` + `SubCommands` under HKCU, which
+    needs no admin rights.
+61. **The worker dies with the app**: it watches its stdin, a pipe only the app holds, and exits
+    when it closes; no Windows job objects or Unix process groups needed. Whisper gets at most 4
+    threads (half the logical cores): ggml's threads spin while waiting, so more made it slower
+    and starved the window.

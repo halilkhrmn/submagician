@@ -1,5 +1,8 @@
 # SubMagician
 
+[![Release](https://img.shields.io/github/v/release/halilkhrmn/submagician)](https://github.com/halilkhrmn/submagician/releases/latest)
+[![Fedora COPR](https://copr.fedorainfracloud.org/coprs/halilkahraman/SubMagician/package/submagician/status_image/last_build.png)](https://copr.fedorainfracloud.org/coprs/halilkahraman/SubMagician/)
+
 Bir klasördeki tüm videolar için altyazı bulur, **senin** dosyan için hazırlanmış olanı seçer,
 kodlamasını ve zamanlamasını düzeltir ve videonun yanına kaydeder. Windows ve Linux (macOS sonra).
 
@@ -16,8 +19,9 @@ kodlamasını ve zamanlamasını düzeltir ve videonun yanına kaydeder. Windows
   zip.
 - **Linux**: `SubMagician-…-x86_64.AppImage` (çalıştırılabilir yapıp aç) ya da Debian/Ubuntu için
   `.deb` (`sudo apt install ./submagician_….deb`).
-- **Fedora**: `sudo dnf copr enable halilkahraman/SubMagician && sudo dnf install submagician`
-  (güncellemeler `dnf upgrade` ile gelir) ya da sürümdeki `.rpm`.
+- **Fedora**: [COPR](https://copr.fedorainfracloud.org/coprs/halilkahraman/SubMagician/) üzerinden,
+  `sudo dnf copr enable halilkahraman/SubMagician && sudo dnf install submagician` (güncellemeler
+  `dnf upgrade` ile gelir) ya da sürümdeki `.rpm`.
 - **Flatpak** (her Linux): sürümdeki `SubMagician-…-x86_64.flatpak`,
   `flatpak install --user ./SubMagician-….flatpak` (Flathub yolda).
 

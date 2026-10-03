@@ -3,6 +3,17 @@
 Release notes, newest first. The app shows the sections since the version that ran before
 ("What's new"), and the release workflow uses the section of the released version.
 
+## 0.1.3
+- Fixed: "Create subtitle from audio" stayed at 0% and made the computer crawl: the speech
+  engine used every processor thread. It now uses a few, at lower priority, and moves along.
+- Fixed: closing SubMagician during a long task left its background process running.
+- Fixed: switching "Look in subfolders" while a task ran seemed to do nothing; the folder is now
+  listed again when the task ends.
+- The ? is inside the buttons now and opens its explanation when clicked.
+- Right-click menu: works on video files on Windows too (also .mkv files no player has
+  claimed), entries can sit under one "SubMagician ▸" submenu, and Settings choose where the
+  menu shows them: folders, the empty area of a folder, video files, or only some video types.
+
 ## 0.1.2
 - A small ? next to the buttons and fields that need it: point at it to see what they do.
   The ? next to "Subtitles found" explains Exact, Good, Fair and Weak.
