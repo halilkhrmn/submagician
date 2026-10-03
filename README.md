@@ -1,5 +1,8 @@
 # SubMagician
 
+[![Release](https://img.shields.io/github/v/release/halilkhrmn/submagician)](https://github.com/halilkhrmn/submagician/releases/latest)
+[![Fedora COPR](https://copr.fedorainfracloud.org/coprs/halilkahraman/SubMagician/package/submagician/status_image/last_build.png)](https://copr.fedorainfracloud.org/coprs/halilkahraman/SubMagician/)
+
 Finds subtitles for a whole folder of videos, picks the one made for **your** file, fixes the
 encoding and the timing, and saves it next to the video. Windows and Linux (macOS later).
 
@@ -16,8 +19,9 @@ From the [website](https://halilkhrmn.github.io/submagician/) or the
   portable zip.
 - **Linux**: `SubMagician-…-x86_64.AppImage` (make it executable and run it), or the `.deb` for
   Debian/Ubuntu (`sudo apt install ./submagician_….deb`).
-- **Fedora**: `sudo dnf copr enable halilkahraman/SubMagician && sudo dnf install submagician`
-  (updates come with `dnf upgrade`), or the `.rpm` from the release.
+- **Fedora**: from [COPR](https://copr.fedorainfracloud.org/coprs/halilkahraman/SubMagician/),
+  `sudo dnf copr enable halilkahraman/SubMagician && sudo dnf install submagician` (updates come
+  with `dnf upgrade`), or the `.rpm` from the release.
 - **Flatpak** (any Linux): `SubMagician-…-x86_64.flatpak` from the release,
   `flatpak install --user ./SubMagician-….flatpak` (Flathub is on the way).
 

@@ -5184,7 +5184,7 @@ dependencies = [
 
 [[package]]
 name = "submagician"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "directories",
  "log",
@@ -5203,7 +5203,7 @@ dependencies = [
 
 [[package]]
 name = "submagician-cli"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "clap",
  "env_logger",
@@ -5214,7 +5214,7 @@ dependencies = [
 
 [[package]]
 name = "submagician-core"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "alass-core",
  "chardetng",

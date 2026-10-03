@@ -18,10 +18,29 @@
   - [x] First release run on GitHub (installer and packages built and smoke-tested in CI)
   - [ ] In-app update tried for real (the repository is public now; needs a second release)
   - [ ] VLC extension tried in VLC (mpv script tried end to end; VLC only syntax-checked)
-- [ ] Fedora COPR project and secret set up; Flathub submission
+- [x] Fedora COPR project and secret set up (halilkahraman/SubMagician builds)
+- [ ] Flathub: on hold (needs development history; manifests may not be AI-written, DECISIONS #59)
 - [ ] Phase 7 — macOS
 
 ## Work log
+
+### 2026-10-03 — 0.1.3: Whisper threads, worker lifeline, help in buttons, right-click menu
+- Found (owner on Windows): "Create subtitle from audio" stuck at 0% with the CPU full, the
+  worker kept running after the app closed, the ? help marks did nothing on click and looked
+  scattered, "Look in subfolders" seemed frozen (the rescan was dropped while the job ran), the
+  right-click menu did not show on video files (registered for the "video" perceived type,
+  which unclaimed .mkv files lack).
+- Done: whisper threads = half the logical cores, 1–4 (ggml threads spin); worker at below-normal
+  priority on Windows and stopped when the app's stdin pipe closes; `HelpButton` (the ? inside,
+  click opens a popup) and a click popup for the remaining ?; deferred rescan with a status
+  line; right-click menu rewritten: per-extension keys written with one `reg import`, optional
+  "SubMagician ▸" submenu (Windows SubCommands, Nautilus script folder, Dolphin X-KDE-Submenu),
+  places (folders, folder background, videos, chosen extensions) in Settings. COPR badge and
+  links in README and on the site.
+- Verified: worker exits (code 3) at once with a closed stdin and finishes a real sync job with
+  it open; tests for the .reg file, extensions and the Linux menus; screenshots of the buttons
+  and a help popup under Xvfb; clippy, fmt, core tests, windows-gnu check of core.
+- Open: try the menu and Whisper on the owner's Windows PC.
 
 ### 2026-10-03 — Fedora COPR and Flatpak packaging
 - Done: `packaging/fedora/` (spec, `make-srpm.sh` with vendored crates and a changelog entry from

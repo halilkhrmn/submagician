@@ -271,6 +271,13 @@ pub fn transcribe(
     Ok(Transcript { language, segments })
 }
 
+/// Threads for whisper.cpp: half the logical cores (about the physical ones), 1 to 4, so the
+/// computer stays usable.
+fn whisper_threads() -> i32 {
+    let logical = std::thread::available_parallelism().map_or(2, |n| n.get());
+    (logical / 2).clamp(1, 4) as i32
+}
+
 /// The quietest 200 ms in the last 30 s of `buffer`, as a sample index.
 fn quietest_cut(buffer: &[f32]) -> usize {
     let from = buffer.len().saturating_sub(CUT_WINDOW);
@@ -301,7 +308,9 @@ fn transcribe_piece(
     let whisper_err = |e: whisper_rs::WhisperError| Error::Parse(format!("whisper: {e}"));
     let mut state = ctx.create_state().map_err(whisper_err)?;
     let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-    let threads = std::thread::available_parallelism().map_or(4, |n| n.get()).min(16) as i32;
+    // whisper.cpp's threads spin while they wait: more than the real cores (or every logical
+    // core) makes it slower and freezes the rest of the computer. Its own default is 4.
+    let threads = whisper_threads();
     params.set_n_threads(threads);
     params.set_translate(translate);
     params.set_language(Some(language.unwrap_or("auto")));
