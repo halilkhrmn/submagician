@@ -1,5 +1,5 @@
 import { Palette } from "std-widgets.slint";
-import { Theme, Icons } from "theme.slint";
+import { Theme, Icons, Flags } from "theme.slint";
 import { FileRow, CandidateRow, Texts } from "state.slint";
 
 // A monochrome icon tinted like text.
@@ -12,72 +12,13 @@ export component Glyph inherits Image {
     image-fit: contain;
 }
 
-export component NavItem inherits Rectangle {
-    in property <image> icon;
-    in property <string> label;
-    in property <bool> selected;
-    // A dot after the label, e.g. an update is available.
-    in property <bool> badge;
-    callback clicked;
-
-    height: 40px;
-    border-radius: 6px;
-    accessible-role: button;
-    accessible-label: label;
-    accessible-action-default => { root.clicked(); }
-    background: selected ? Theme.card : touch.has-hover ? Theme.card-hover : transparent;
-    animate background { duration: 120ms; }
-
-    touch := TouchArea {
-        mouse-cursor: pointer;
-        clicked => { root.clicked(); }
-    }
-
-    // Accent pill on the selected item, like Windows 11 navigation views.
-    Rectangle {
-        x: 0;
-        width: 3px;
-        height: selected ? 16px : 0px;
-        y: (parent.height - self.height) / 2;
-        border-radius: 1.5px;
-        background: Palette.accent-background;
-        animate height { duration: 150ms; easing: ease-out; }
-    }
-
-    HorizontalLayout {
-        padding-left: 14px;
-        spacing: 12px;
-        VerticalLayout {
-            alignment: center;
-            Glyph { source: icon; size: 18px; }
-        }
-        Text {
-            text: label;
-            vertical-alignment: center;
-            font-size: 14px;
-            horizontal-stretch: 1;
-            overflow: elide;
-        }
-        if badge: VerticalLayout {
-            alignment: center;
-            padding-right: 12px;
-            Rectangle {
-                width: 8px;
-                height: 8px;
-                border-radius: 4px;
-                background: Palette.accent-background;
-            }
-        }
-    }
-}
-
 // A rounded panel with an optional title row.
 export component Card inherits Rectangle {
     in property <string> title;
     in property <image> icon;
     in property <bool> has-icon: false;
-    in property <length> inner-padding: 16px;
-    in property <length> inner-spacing: 12px;
+    in property <length> inner-padding: 14px;
+    in property <length> inner-spacing: 10px;
     border-radius: Theme.radius;
     border-width: 1px;
     border-color: Theme.border;
@@ -243,6 +184,8 @@ export component IconButton inherits Rectangle {
     in property <image> icon;
     in property <string> label;
     in property <bool> enabled: true;
+    // A dot in the corner, e.g. an update is available.
+    in property <bool> badge;
     callback clicked;
     width: 32px;
     height: 32px;
@@ -260,6 +203,56 @@ export component IconButton inherits Rectangle {
         enabled: root.enabled;
         mouse-cursor: pointer;
         clicked => { root.clicked(); }
+    }
+    if root.badge: Rectangle {
+        x: parent.width - 10px;
+        y: 4px;
+        width: 7px;
+        height: 7px;
+        border-radius: 3.5px;
+        background: Palette.accent-background;
+    }
+}
+
+// A language as its flag (the code when there is no flag for it).
+export component LangFlag inherits HorizontalLayout {
+    in property <string> code;
+    in property <bool> faded;
+    if Flags.has(root.code): Rectangle {
+        width: 20px;
+        height: 15px;
+        border-radius: 2px;
+        clip: true;
+        opacity: root.faded ? 0.45 : 1;
+        accessible-role: text;
+        accessible-label: root.code;
+        Image {
+            width: parent.width;
+            height: parent.height;
+            source: Flags.of(root.code);
+            image-fit: fill;
+        }
+        Rectangle {
+            border-radius: 2px;
+            border-width: 1px;
+            border-color: Theme.border;
+        }
+    }
+    if !Flags.has(root.code): Badge {
+        text: root.code;
+        tone: Theme.idle;
+        opacity: root.faded ? 0.6 : 1;
+    }
+}
+
+// Several languages as flags in a row.
+export component LangFlags inherits HorizontalLayout {
+    in property <[string]> codes;
+    in property <bool> faded;
+    spacing: 4px;
+    for code in root.codes: VerticalLayout {
+        alignment: center;
+        LangFlag { code: code; faded: root.faded; }
     }
 }
 
@@ -288,7 +281,7 @@ export component FileCard inherits Rectangle {
     property <int> tone: Texts.file-tone(item.state);
     property <color> tone-color: Theme.tone-color(tone);
 
-    height: 60px;
+    height: 50px;
     clip: true;
     border-radius: 6px;
     background: selected ? Palette.accent-background.transparentize(0.86) : touch.has-hover ? Theme.card-hover : transparent;
@@ -300,19 +293,19 @@ export component FileCard inherits Rectangle {
     }
 
     HorizontalLayout {
-        padding-left: 10px;
-        padding-right: 12px;
-        spacing: 12px;
+        padding-left: 8px;
+        padding-right: 10px;
+        spacing: 10px;
 
         VerticalLayout {
             alignment: center;
             Rectangle {
-                width: 34px;
-                height: 34px;
-                border-radius: 17px;
+                width: 28px;
+                height: 28px;
+                border-radius: 14px;
                 background: root.tone-color.transparentize(0.85);
                 Glyph {
-                    size: 18px;
+                    size: 16px;
                     color: root.tone-color;
                     source: tone == 2 ? Icons.done : tone == 4 ? Icons.error : tone == 3 ? Icons.warning : tone == 1 ? Icons.sync : Icons.video;
                 }
@@ -322,17 +315,18 @@ export component FileCard inherits Rectangle {
         VerticalLayout {
             alignment: center;
             horizontal-stretch: 1;
-            spacing: 2px;
+            spacing: 1px;
             Text {
                 text: root.item.name;
                 overflow: elide;
                 font-weight: 600;
+                font-size: 13px;
             }
             Text {
                 text: Texts.file-state(root.item.state, root.item.detail)
                     + (root.item.progress >= 0 ? "  " + round(root.item.progress * 100) + "%" : "");
                 overflow: elide;
-                font-size: 12px;
+                font-size: 11px;
                 color: root.tone == 0 ? Theme.muted : root.tone-color;
             }
             if root.item.progress >= 0: ProgressBar {
@@ -340,21 +334,23 @@ export component FileCard inherits Rectangle {
             }
         }
 
-        VerticalLayout {
-            alignment: center;
+        // Subtitles next to the video as flags; the ones inside it faded after a film icon.
+        HorizontalLayout {
+            alignment: end;
             horizontal-stretch: 0;
-            HorizontalLayout {
-                spacing: 4px;
-                alignment: end;
-                if root.item.existing != "": Badge {
-                    text: root.item.existing;
-                    tone: Theme.ok;
+            spacing: 6px;
+            LangFlags { codes: root.item.existing-langs; }
+            if root.item.embedded-langs.length > 0: HorizontalLayout {
+                spacing: 3px;
+                VerticalLayout {
+                    alignment: center;
+                    Glyph { source: Icons.video; size: 12px; color: Theme.muted; }
                 }
-                if root.item.embedded != "": Badge {
-                    text: @tr("in video: {}", root.item.embedded);
-                    tone: Theme.idle;
-                }
-                if root.item.existing == "" && root.item.embedded == "": Badge {
+                LangFlags { codes: root.item.embedded-langs; faded: true; }
+            }
+            if root.item.existing == "" && root.item.embedded == "": VerticalLayout {
+                alignment: center;
+                Badge {
                     text: @tr("no subtitle");
                     tone: Theme.warn;
                 }
@@ -363,14 +359,16 @@ export component FileCard inherits Rectangle {
     }
 }
 
-// One subtitle a source offers.
+// One subtitle a source offers: how well it fits, its name and what is known about it.
 export component CandidateCard inherits Rectangle {
     in property <CandidateRow> item;
     in property <bool> selected;
     callback clicked();
     callback double-clicked();
 
-    height: 54px;
+    property <color> fit: Theme.tone-color(Texts.match-tone(item.score, item.hash-match));
+
+    height: 46px;
     border-radius: 6px;
     background: selected ? Palette.accent-background.transparentize(0.86) : touch.has-hover ? Theme.card-hover : transparent;
 
@@ -381,38 +379,27 @@ export component CandidateCard inherits Rectangle {
     }
 
     HorizontalLayout {
-        padding-left: 8px;
-        padding-right: 10px;
-        spacing: 10px;
+        padding-left: 6px;
+        padding-right: 8px;
+        spacing: 8px;
 
         VerticalLayout {
             alignment: center;
-            Rectangle {
-                width: 40px;
-                height: 24px;
-                border-radius: 12px;
-                background: root.item.score >= 100 ? Theme.ok : (root.item.score >= 40 ? Theme.warn : Theme.idle);
-                Text {
-                    text: root.item.score;
-                    color: white;
-                    font-size: 12px;
-                    font-weight: 700;
-                }
-            }
+            LangFlag { code: root.item.language; }
         }
 
         VerticalLayout {
             alignment: center;
             horizontal-stretch: 1;
-            spacing: 2px;
+            spacing: 1px;
             Text {
                 text: root.item.release == "" ? @tr("(no release name)") : root.item.release;
                 overflow: elide;
+                font-size: 13px;
             }
             Text {
                 text: root.item.provider
                     + (root.item.hash-match ? " · " + @tr("made for this file") : "")
-                    + (root.item.trusted ? " · " + @tr("trusted") : "")
                     + (root.item.fps != "" ? " · " + root.item.fps + " fps" : "")
                     + (root.item.hearing-impaired ? " · " + @tr("hearing impaired") : "")
                     + (root.item.machine ? " · " + @tr("machine translated") : "")
@@ -426,8 +413,8 @@ export component CandidateCard inherits Rectangle {
         VerticalLayout {
             alignment: center;
             Badge {
-                text: root.item.language;
-                tone: Palette.accent-background;
+                text: Texts.match-label(root.item.score, root.item.hash-match);
+                tone: root.fit;
             }
         }
     }

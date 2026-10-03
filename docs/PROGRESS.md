@@ -15,12 +15,29 @@
 - [x] Phase 5 — Speech: Whisper write-from-audio (app, batch/watch fallback, CLI)
   - [ ] Try on real films with base/small models (speed and quality on a normal PC)
 - [x] Phase 6 — Packaging, updates, logs, new interface, player plugins, fast sync
-  - [ ] First release run on GitHub (installer and packages built and smoke-tested in CI)
+  - [x] First release run on GitHub (installer and packages built and smoke-tested in CI)
   - [ ] In-app update tried for real (the repository is public now; needs a second release)
   - [ ] VLC extension tried in VLC (mpv script tried end to end; VLC only syntax-checked)
 - [ ] Phase 7 — macOS
 
 ## Work log
+
+### 2026-10-03 — 0.1.1: Whisper crash, simpler window, flags, crash dialog, menu entries
+- Found (owner's report on Windows): "From audio" killed the worker with 0xC000001D (illegal
+  instruction); whisper.cpp was built with GGML_NATIVE on the CI runner. The error shown was the
+  last Whisper log line.
+- Done: `GGML_NATIVE=OFF` (`.cargo/config.toml`, release env), release check of the CMake cache,
+  new CI cache key, `speech::cpu_supported`; worker log filtered to Whisper warnings;
+  `Error::Crashed` + crash dialog with "Report it"; model download dialog ("From audio", the
+  write-from-audio switch); no sidebar: top bar with folder, Open, settings gear, back button in
+  Settings; player plugins, subfolders and watch in Settings; flags for languages; fit words
+  instead of scores with a ? legend; compact cards; right-click entries in Settings with
+  `--get` / `--sync`. Plugins were already rewritten at start when the app changed (no change).
+- Verified: whisper-rs-sys rebuilt locally with `GGML_NATIVE:BOOL=OFF`, AVX2/FMA on, AVX-512 off;
+  test kills a fake worker with SIGILL → `Crashed { cpu: true }`; integration test for the menu
+  entries; `--get` on a folder opened it and downloaded from SubDL/Addic7ed; screenshots under
+  Xvfb (library, settings, model dialog); clippy, fmt, core tests, windows-gnu check of core.
+- Open: the crash fix needs the 0.1.1 release to be tried on the owner's PC.
 
 ### 2026-10-03 — First release run: AppImage start fix
 - Found: the release smoke test started the AppImage on a clean Ubuntu 24.04 container without

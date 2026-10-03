@@ -35,14 +35,16 @@ güncellemeden sonra neyin yeni olduğunu gösterir.
 ## Kullanım
 
 1. **Choose folder…** ya da **Open videos…**, pencereye sürükleyip bırak ya da dosya
-   yöneticisinde bir klasöre sağ tıkla → *Find subtitles with SubMagician* (Settings → File
-   manager bu girişi ekler).
-2. **Get subtitles for all**, ya da bir videoya tıkla: sağdaki panel neyi olduğunu, kaynakların
-   sunduğu altyazıları (en iyisi üstte) ve zamanlamasını gösterir. **Search as…** yanlış
+   yöneticisinde bir klasöre veya videoya sağ tıkla (Settings → Right-click menu SubMagician'ı
+   oraya ekler ve girişlerini seçtirir: SubMagician'da aç, altyazı getir, altyazıyı sese
+   senkronla).
+2. **Get subtitles for all**, ya da bir videoya tıkla: sağdaki panel altyazılarını bayrak olarak
+   ve kaynakların sunduklarını en iyisi üstte gösterir; her biri **Exact** (tam bu dosya için
+   yapılmış), **Good**, **Fair** ya da **Weak** diye işaretlidir. **Search as…** yanlış
    adlandırılmış bir dosyayı başka bir adla arar.
 3. Altyazı `Film.mkv`'nin yanına `Film.tr.srt` olarak kaydedilir; oynatıcılar kendiliğinden
-   yükler. Hemen sese senkronlanır. Yerine geçtiği dosya saklanır: *Timing* içindeki geri alma
-   düğmesi onu geri koyar.
+   yükler. Hemen sese senkronlanır. Yerine geçtiği dosya saklanır: *Sync to audio*'nun yanındaki
+   geri alma düğmesi onu geri koyar.
 
 ![Senkron](docs/img/sync.png)
 
@@ -58,15 +60,16 @@ Dahası:
   olarak kullanılamaz.
 - Ağır işler (senkron, sesten yazma) ayrı bir süreçte çalışır: pencere hiç donmaz, her video
   ilerlemesini gösterir, **Stop** hemen bitirir.
-- **Watch for new videos**: klasöre gelen yeni videolar kopyalanması bitince altyazısını kendisi
-  alır. **Only missing** işi biten videoları gizler.
+- **Açık klasörü izleme** (Settings → Library): klasöre gelen yeni videolar kopyalanması bitince
+  altyazısını kendisi alır. **Only videos without a subtitle** işi biten videoları gizler.
 - **From audio** (Whisper, bu bilgisayarda): hiçbir kaynakta altyazı yoksa konuşmadan yazılır.
-  Settings → Speech'ten bir model seçip indir; otomatik de çalışabilir. İngilizceye her dilden
+  İlk seferde konuşma modelini indirmeyi önerir; Settings → Speech başka bir model seçer,
+  otomatik de çalışabilir. İngilizceye her dilden
   çevirir; diğer diller konuşulduğu gibi yazılır.
 
 ### Oynatıcı eklentileri
 
-Kenar çubuğundaki **Player plugins** bilgisayarındaki mpv'yi (ve mpv.net'i) ve VLC'yi bulur,
+**Settings → Player plugins** bilgisayarındaki mpv'yi (ve mpv.net'i) ve VLC'yi bulur,
 SubMagician'ı tek tıkla içlerine kurar. Sonra:
 
 - **mpv**: senin dilinde altyazısı olmayan bir video kendiliğinden altyazı alır; **Alt+S** altyazı

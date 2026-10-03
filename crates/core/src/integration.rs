@@ -1,5 +1,6 @@
-//! "Find subtitles" in the file manager: right-click a folder or a video to open it in
-//! SubMagician.
+//! SubMagician in the file manager's right-click menu, with the entries the user picked:
+//! open a folder or video in SubMagician, get subtitles for it, or sync its subtitle to the
+//! audio. The last two open the window too and start the work there (`--get` / `--sync`).
 //!
 //! - Windows: entries under `HKCU\Software\Classes` for folders, folder backgrounds and video
 //!   files (no admin rights needed).
@@ -10,6 +11,72 @@
 use std::path::{Path, PathBuf};
 
 use crate::Result;
+
+/// Which entries the right-click menu has.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct MenuEntries {
+    /// "Open in SubMagician" (folders and videos).
+    pub open: bool,
+    /// "Get subtitles" in the wanted languages (folders and videos).
+    pub get: bool,
+    /// "Sync subtitle to the audio" (videos).
+    pub sync: bool,
+}
+
+impl Default for MenuEntries {
+    fn default() -> Self {
+        MenuEntries { open: true, get: true, sync: true }
+    }
+}
+
+/// What a menu entry asks the app to do with the path it passes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Action {
+    Open,
+    Get,
+    Sync,
+}
+
+impl Action {
+    /// The command-line flag before the path (`None`: just the path).
+    pub fn flag(self) -> Option<&'static str> {
+        match self {
+            Action::Open => None,
+            Action::Get => Some("--get"),
+            Action::Sync => Some("--sync"),
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Action::Open => "Open in SubMagician",
+            Action::Get => "Get subtitles with SubMagician",
+            Action::Sync => "Sync subtitle to the audio (SubMagician)",
+        }
+    }
+
+    /// Reads the app's own arguments: `[--get|--sync] <path>`.
+    pub fn from_args(mut args: impl Iterator<Item = std::ffi::OsString>) -> Option<(Action, PathBuf)> {
+        let first = args.next()?;
+        let action = match first.to_str() {
+            Some("--get") => Action::Get,
+            Some("--sync") => Action::Sync,
+            _ => return Some((Action::Open, PathBuf::from(first))),
+        };
+        args.next().map(|p| (action, PathBuf::from(p)))
+    }
+}
+
+impl MenuEntries {
+    /// The chosen entries, in menu order.
+    pub fn chosen(self) -> Vec<Action> {
+        [(self.open, Action::Open), (self.get, Action::Get), (self.sync, Action::Sync)]
+            .into_iter()
+            .filter_map(|(on, a)| on.then_some(a))
+            .collect()
+    }
+}
 
 /// The program the menu entries start: the AppImage when running from one, else this executable.
 pub fn current_program() -> Option<PathBuf> {
@@ -31,23 +98,17 @@ mod unix {
     use std::os::unix::fs::PermissionsExt;
 
     const MIME: &str = "inode/directory;video/x-matroska;video/mp4;video/x-msvideo;video/quicktime;video/webm;video/mpeg;video/x-ms-wmv;video/mp2t;video/x-flv;video/3gpp;";
+    const SCRIPT_DIRS: [&str; 3] = ["nautilus/scripts", "nemo/scripts", "caja/scripts"];
+    /// Script names of earlier versions, removed on every change.
+    const OLD_SCRIPTS: [&str; 1] = ["Find subtitles with SubMagician"];
+    const ALL: [Action; 3] = [Action::Open, Action::Get, Action::Sync];
 
-    struct Files {
-        launcher: PathBuf,
-        scripts: Vec<PathBuf>,
-        service_menu: PathBuf,
+    fn launcher(data: &Path) -> PathBuf {
+        data.join("applications/submagician.desktop")
     }
 
-    fn files(data: &Path) -> Files {
-        let script = "Find subtitles with SubMagician";
-        Files {
-            launcher: data.join("applications/submagician.desktop"),
-            scripts: ["nautilus/scripts", "nemo/scripts", "caja/scripts"]
-                .iter()
-                .map(|d| data.join(d).join(script))
-                .collect(),
-            service_menu: data.join("kio/servicemenus/submagician.desktop"),
-        }
+    fn service_menu(data: &Path) -> PathBuf {
+        data.join("kio/servicemenus/submagician.desktop")
     }
 
     fn data_dir() -> Option<PathBuf> {
@@ -60,8 +121,15 @@ mod unix {
         format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"").replace('`', "\\`").replace('$', "\\$"))
     }
 
-    pub fn install(program: &Path) -> Result<()> {
-        install_into(&data_dir().ok_or_else(no_home)?, program)
+    fn exec(program: &Path, action: Action, arg: &str) -> String {
+        match action.flag() {
+            Some(flag) => format!("{} {flag} {arg}", quoted(program)),
+            None => format!("{} {arg}", quoted(program)),
+        }
+    }
+
+    pub fn install(program: &Path, entries: MenuEntries) -> Result<()> {
+        install_into(&data_dir().ok_or_else(no_home)?, program, entries)
     }
 
     pub fn uninstall() -> Result<()> {
@@ -69,44 +137,64 @@ mod unix {
     }
 
     pub fn is_installed() -> bool {
-        data_dir().is_some_and(|d| files(&d).launcher.is_file())
+        data_dir().is_some_and(|d| launcher(&d).is_file())
     }
 
     fn no_home() -> crate::Error {
         crate::Error::Io(std::io::Error::other("no home folder"))
     }
 
-    pub(super) fn install_into(data: &Path, program: &Path) -> Result<()> {
-        let f = files(data);
-        let exec = quoted(program);
+    pub(super) fn install_into(data: &Path, program: &Path, entries: MenuEntries) -> Result<()> {
+        // Start clean, so entries switched off disappear.
+        uninstall_from(data)?;
         write(
-            &f.launcher,
+            &launcher(data),
             &format!(
-                "[Desktop Entry]\nType=Application\nName=SubMagician\nComment=Find, pick and sync subtitles\nExec={exec} %f\nIcon=video-x-generic\nTerminal=false\nCategories=AudioVideo;Video;\nMimeType={MIME}\nNoDisplay=false\n"
+                "[Desktop Entry]\nType=Application\nName=SubMagician\nComment=Find, pick and sync subtitles\nExec={}\nIcon=video-x-generic\nTerminal=false\nCategories=AudioVideo;Video;\nMimeType={MIME}\nNoDisplay=false\n",
+                exec(program, Action::Open, "%f")
             ),
             false,
         )?;
-        let script = format!("#!/bin/sh\n# Added by SubMagician (Settings → File manager).\nexec {exec} \"$1\"\n");
-        for path in &f.scripts {
+        let chosen = entries.chosen();
+        for dir in SCRIPT_DIRS {
             // Only for file managers that are there: their scripts folder's parent exists.
-            if path.parent().and_then(Path::parent).is_some_and(Path::is_dir) {
-                write(path, &script, true)?;
+            if !data.join(dir).parent().is_some_and(Path::is_dir) {
+                continue;
+            }
+            for action in &chosen {
+                let script = format!(
+                    "#!/bin/sh\n# Added by SubMagician (Settings → File manager).\nexec {} \"$1\"\n",
+                    exec(program, *action, "").trim_end()
+                );
+                write(&data.join(dir).join(action.label()), &script, true)?;
             }
         }
-        write(
-            &f.service_menu,
-            &format!(
-                "[Desktop Entry]\nType=Service\nX-KDE-ServiceTypes=KonqPopupMenu/Plugin\nMimeType={MIME}\nActions=findSubtitles;\n\n[Desktop Action findSubtitles]\nName=Find subtitles with SubMagician\nIcon=video-x-generic\nExec={exec} %f\n"
-            ),
-            true,
-        )?;
+        if !chosen.is_empty() {
+            let ids: Vec<String> = chosen.iter().map(|a| format!("{a:?}").to_lowercase()).collect();
+            let mut menu = format!(
+                "[Desktop Entry]\nType=Service\nX-KDE-ServiceTypes=KonqPopupMenu/Plugin\nMimeType={MIME}\nActions={};\n",
+                ids.join(";")
+            );
+            for (action, id) in chosen.iter().zip(&ids) {
+                menu += &format!(
+                    "\n[Desktop Action {id}]\nName={}\nIcon=video-x-generic\nExec={}\n",
+                    action.label(),
+                    exec(program, *action, "%f")
+                );
+            }
+            write(&service_menu(data), &menu, true)?;
+        }
         Ok(())
     }
 
     pub(super) fn uninstall_from(data: &Path) -> Result<()> {
-        let f = files(data);
-        for path in std::iter::once(&f.launcher).chain(&f.scripts).chain(std::iter::once(&f.service_menu)) {
-            match fs::remove_file(path) {
+        let mut paths = vec![launcher(data), service_menu(data)];
+        for dir in SCRIPT_DIRS {
+            paths.extend(ALL.iter().map(|a| data.join(dir).join(a.label())));
+            paths.extend(OLD_SCRIPTS.iter().map(|n| data.join(dir).join(n)));
+        }
+        for path in paths {
+            match fs::remove_file(&path) {
                 Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e.into()),
                 _ => {}
             }
@@ -135,23 +223,31 @@ mod unix {
             let _ = fs::remove_dir_all(&data);
             fs::create_dir_all(data.join("nautilus")).unwrap(); // GNOME Files is "installed", Nemo is not
             let program = Path::new("/opt/Sub Magician/submagician");
-            install_into(&data, program).unwrap();
+            install_into(&data, program, MenuEntries::default()).unwrap();
 
             let launcher = fs::read_to_string(data.join("applications/submagician.desktop")).unwrap();
             assert!(launcher.contains("Exec=\"/opt/Sub Magician/submagician\" %f"), "{launcher}");
             assert!(launcher.contains("MimeType=inode/directory;"));
-            let script = data.join("nautilus/scripts/Find subtitles with SubMagician");
-            assert!(fs::read_to_string(&script).unwrap().contains("exec \"/opt/Sub Magician/submagician\" \"$1\""));
-            assert_eq!(fs::metadata(&script).unwrap().permissions().mode() & 0o777, 0o755);
+            let open = data.join("nautilus/scripts/Open in SubMagician");
+            assert!(fs::read_to_string(&open).unwrap().contains("exec \"/opt/Sub Magician/submagician\" \"$1\""));
+            assert_eq!(fs::metadata(&open).unwrap().permissions().mode() & 0o777, 0o755);
+            let get = fs::read_to_string(data.join("nautilus/scripts/Get subtitles with SubMagician")).unwrap();
+            assert!(get.contains("exec \"/opt/Sub Magician/submagician\" --get \"$1\""), "{get}");
             assert!(!data.join("nemo").exists(), "no scripts for file managers that are not there");
             let menu = fs::read_to_string(data.join("kio/servicemenus/submagician.desktop")).unwrap();
-            assert!(
-                menu.contains("Actions=findSubtitles;") && menu.contains("Exec=\"/opt/Sub Magician/submagician\" %f")
-            );
+            assert!(menu.contains("Actions=open;get;sync;"), "{menu}");
+            assert!(menu.contains("Exec=\"/opt/Sub Magician/submagician\" --sync %f"), "{menu}");
+
+            // Switching an entry off removes it.
+            install_into(&data, program, MenuEntries { open: true, get: false, sync: false }).unwrap();
+            assert!(open.exists());
+            assert!(!data.join("nautilus/scripts/Get subtitles with SubMagician").exists());
+            let menu = fs::read_to_string(data.join("kio/servicemenus/submagician.desktop")).unwrap();
+            assert!(menu.contains("Actions=open;") && !menu.contains("--get"), "{menu}");
 
             uninstall_from(&data).unwrap();
             assert!(!data.join("applications/submagician.desktop").exists());
-            assert!(!script.exists());
+            assert!(!open.exists());
             uninstall_from(&data).unwrap(); // twice is fine
             fs::remove_dir_all(&data).unwrap();
         }
@@ -170,11 +266,21 @@ mod windows {
     use std::process::{Command, Stdio};
 
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    const KEYS: [(&str, &str); 3] = [
-        (r"HKCU\Software\Classes\Directory\shell\SubMagician", "%1"),
-        (r"HKCU\Software\Classes\Directory\Background\shell\SubMagician", "%V"),
-        (r"HKCU\Software\Classes\SystemFileAssociations\video\shell\SubMagician", "%1"),
+    /// Where the entries go and the placeholder for the clicked item.
+    const PLACES: [(&str, &str); 3] = [
+        (r"HKCU\Software\Classes\Directory\shell", "%1"),
+        (r"HKCU\Software\Classes\Directory\Background\shell", "%V"),
+        (r"HKCU\Software\Classes\SystemFileAssociations\video\shell", "%1"),
     ];
+    const ALL: [Action; 3] = [Action::Open, Action::Get, Action::Sync];
+
+    fn key_name(action: Action) -> &'static str {
+        match action {
+            Action::Open => "SubMagician",
+            Action::Get => "SubMagicianGet",
+            Action::Sync => "SubMagicianSync",
+        }
+    }
 
     fn reg(args: &[&str]) -> Result<bool> {
         let status = Command::new("reg")
@@ -187,29 +293,54 @@ mod windows {
         Ok(status.success())
     }
 
-    pub fn install(program: &Path) -> Result<()> {
+    pub fn install(program: &Path, entries: MenuEntries) -> Result<()> {
+        uninstall()?;
         let exe = program.display().to_string();
-        for (key, arg) in KEYS {
-            let command = format!("\"{exe}\" \"{arg}\"");
-            let ok = reg(&["add", key, "/ve", "/d", "Find subtitles with SubMagician", "/f"])?
-                && reg(&["add", key, "/v", "Icon", "/d", &exe, "/f"])?
-                && reg(&["add", &format!(r"{key}\command"), "/ve", "/d", &command, "/f"])?;
-            if !ok {
-                return Err(crate::Error::Io(std::io::Error::other(format!("could not write {key}"))));
+        for action in entries.chosen() {
+            for (place, arg) in PLACES {
+                let key = format!(r"{place}\{}", key_name(action));
+                let command = match action.flag() {
+                    Some(flag) => format!("\"{exe}\" {flag} \"{arg}\""),
+                    None => format!("\"{exe}\" \"{arg}\""),
+                };
+                let ok = reg(&["add", &key, "/ve", "/d", action.label(), "/f"])?
+                    && reg(&["add", &key, "/v", "Icon", "/d", &exe, "/f"])?
+                    && reg(&["add", &format!(r"{key}\command"), "/ve", "/d", &command, "/f"])?;
+                if !ok {
+                    return Err(crate::Error::Io(std::io::Error::other(format!("could not write {key}"))));
+                }
             }
         }
         Ok(())
     }
 
     pub fn uninstall() -> Result<()> {
-        for (key, _) in KEYS {
-            // Fails when the key is not there, which is fine.
-            let _ = reg(&["delete", key, "/f"])?;
+        for action in ALL {
+            for (place, _) in PLACES {
+                // Fails when the key is not there, which is fine.
+                let _ = reg(&["delete", &format!(r"{place}\{}", key_name(action)), "/f"])?;
+            }
         }
         Ok(())
     }
 
     pub fn is_installed() -> bool {
-        reg(&["query", KEYS[0].0]).unwrap_or(false)
+        ALL.iter().any(|a| reg(&["query", &format!(r"{}\{}", PLACES[0].0, key_name(*a))]).unwrap_or(false))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_the_app_arguments() {
+        let args = |a: &[&str]| Action::from_args(a.iter().map(std::ffi::OsString::from));
+        assert_eq!(args(&[]), None);
+        assert_eq!(args(&["/v/a.mkv"]), Some((Action::Open, PathBuf::from("/v/a.mkv"))));
+        assert_eq!(args(&["--get", "/v"]), Some((Action::Get, PathBuf::from("/v"))));
+        assert_eq!(args(&["--sync", "/v/a.mkv"]), Some((Action::Sync, PathBuf::from("/v/a.mkv"))));
+        assert_eq!(args(&["--sync"]), None);
+        assert_eq!(MenuEntries { open: false, get: true, sync: true }.chosen(), vec![Action::Get, Action::Sync]);
     }
 }

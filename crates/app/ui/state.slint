@@ -8,6 +8,9 @@ export struct FileRow {
     existing: string,
     // Languages of subtitle tracks inside the video ("tr").
     embedded: string,
+    // The same as language codes, for flags.
+    existing-langs: [string],
+    embedded-langs: [string],
     // It has a subtitle (file or track) in the most wanted language.
     has-wanted: bool,
     // See Texts.file-state.
@@ -109,7 +112,7 @@ export global Texts {
         if kind == 16 { return @tr("Moved {} by {} ms.", detail, a); }
         if kind == 17 { return @tr("This video has no subtitle to sync yet."); }
         if kind == 18 { return @tr("Search cache cleared."); }
-        if kind == 19 { return @tr("\"Find subtitles with SubMagician\" is now in the file manager's menu."); }
+        if kind == 19 { return @tr("SubMagician is now in the file manager's right-click menu."); }
         if kind == 20 { return @tr("Removed from the file manager's menu."); }
         if kind == 21 { return @tr("New video in the folder: {}", detail); }
         if kind == 22 { return @tr("Put back the previous {}.", detail); }
@@ -118,7 +121,7 @@ export global Texts {
         if kind == 25 { return @tr("Speech model {} is ready.", detail); }
         if kind == 26 { return @tr("Listening to the audio… {}%", a); }
         if kind == 27 { return @tr("Wrote {} from the audio.", detail); }
-        if kind == 28 { return @tr("No speech model yet: download one in Settings → Speech."); }
+        if kind == 28 { return @tr("No speech model yet."); }
         if kind == 29 { return @tr("Downloading ffmpeg… {}%", a); }
         if kind == 30 { return @tr("ffmpeg is ready; subtitles can be synced to the audio now."); }
         if kind == 31 { return @tr("The {} plugin is installed. Restart the player if it is open.", detail); }
@@ -133,6 +136,21 @@ export global Texts {
         return @tr("Ready.");
     }
 
+    // How well a found subtitle fits the video, from its score (core::score): a hash match
+    // means it was made for this very file.
+    public pure function match-label(score: int, hash-match: bool) -> string {
+        if hash-match || score >= 100 { return @tr("Exact"); }
+        if score >= 60 { return @tr("Good"); }
+        if score >= 30 { return @tr("Fair"); }
+        return @tr("Weak");
+    }
+    public pure function match-tone(score: int, hash-match: bool) -> int {
+        if hash-match || score >= 100 { return 2; }
+        if score >= 60 { return 1; }
+        if score >= 30 { return 3; }
+        return 0;
+    }
+
     // Tone of a status message.
     public pure function status-tone(kind: int) -> int {
         if kind == 1 || kind == 3 || kind == 4 || kind == 12 || kind == 24 || kind == 26 || kind == 29 || kind == 33 || kind == 36 { return 1; }
@@ -143,8 +161,7 @@ export global Texts {
     }
 }
 
-// Pages of the sidebar.
-export enum Page { library, players, settings }
+export enum Page { library, settings }
 
 export global AppState {
     in-out property <Page> page: Page.library;
@@ -244,6 +261,21 @@ export global AppState {
     in property <string> update-version;
     in property <string> update-error;
     callback check-for-update();
+    // Right-click menu entries (Settings → File manager).
+    in-out property <bool> menu-open;
+    in-out property <bool> menu-get;
+    in-out property <bool> menu-sync;
+    callback menu-entries-changed();
+
+    // "Download the speech model?" when something needs it.
+    in-out property <bool> model-prompt-visible;
+    in property <string> model-prompt-name;
+    callback model-prompt-accept();
+
+    // The background process crashed: say so and offer a report.
+    in-out property <bool> crash-visible;
+    in property <bool> crash-cpu;
+    in property <string> crash-detail;
     callback install-update();
     callback open-release();
     in-out property <bool> update-dismissed;

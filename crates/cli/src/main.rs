@@ -74,7 +74,8 @@ fn main() -> ExitCode {
     let args = Args::parse();
     if let Some(job) = &args.worker {
         // The app shows these lines in its own log.
-        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+        // whisper.cpp reports every step of loading a model; only its warnings are worth keeping.
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info,whisper_rs=warn")).init();
         return if submagician_core::jobs::serve(job) { ExitCode::SUCCESS } else { ExitCode::from(1) };
     }
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("error")).init();

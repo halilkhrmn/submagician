@@ -49,6 +49,8 @@ pub struct Settings {
     pub detailed_logs: bool,
     /// Player plugins look for a subtitle by themselves when a video starts.
     pub player_auto: bool,
+    /// Entries in the file manager's right-click menu (when it is added there).
+    pub menu: crate::integration::MenuEntries,
 }
 
 impl Default for Settings {
@@ -74,6 +76,7 @@ impl Default for Settings {
             last_version_seen: String::new(),
             detailed_logs: false,
             player_auto: true,
+            menu: crate::integration::MenuEntries::default(),
         }
     }
 }

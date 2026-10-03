@@ -79,7 +79,7 @@ crates/core/   submagician-core, no GUI (shared by app and CLI)
   settings     settings file (JSON in the OS config folder) and the engine it describes
   probe        subtitle track languages inside a video (ffprobe)
   watch        folder watch: videos that appeared and stopped growing
-  integration  "Find subtitles" in the file manager (HKCU registry / Linux launchers, scripts)
+  integration  right-click menu entries (HKCU registry / Linux launchers, scripts); --get/--sync
   tools        Windows: ffmpeg/ffprobe download on request (gyan.dev, SHA-256 checked)
   speech       (feature `whisper`) Whisper models, download, transcription to SRT
   autosync     fast sync to the audio: speech cache on disk, quick look at windows, full read
@@ -91,10 +91,10 @@ crates/core/   submagician-core, no GUI (shared by app and CLI)
   players      mpv / mpv.net / VLC detection and plugin install (scripts from plugins/)
   net          HTTP clients (system roots, built-in Mozilla roots when the system has none)
 crates/app/    submagician (binary)
-  ui/app.slint  window: sidebar (Library, Player plugins, Settings), update banner, dialogs
+  ui/app.slint  window: top bar (folder, Open, settings gear / back), update banner, dialogs
   ui/state.slint  AppState global (all properties/callbacks), Texts (state codes → @tr text)
-  ui/theme.slint, components.slint  colours, Fluent icons (ui/icons), cards, rows, badges
-  ui/library.slint, players.slint, settings.slint, dialogs.slint  the pages and dialogs
+  ui/theme.slint, components.slint  colours, Fluent icons (ui/icons), flags (ui/flags), cards, rows
+  ui/library.slint, settings.slint (+ players.slint section), dialogs.slint  pages and dialogs
   src/main.rs  startup, log, tokio runtime, command-line path, drag & drop
   src/controller.rs  UI callbacks → tokio tasks → upgrade_in_event_loop; batch runs, epochs
   src/controller/{updates,support,plugins}.rs  updates + What's new, logs + report, plugins
@@ -115,6 +115,8 @@ docs/          PLAN, PROGRESS, DECISIONS, RELEASING
   work are dropped by comparing the folder *epoch* (bumped on every rescan).
 - One busy operation at a time (`busy` property); batch runs stop on fatal errors (no key, login
   failed, download limit).
+- whisper.cpp is built with `GGML_NATIVE=OFF` (`.cargo/config.toml`): never for the build
+  machine's CPU (decision 52).
 - Syncing to the audio, taking a track out of a video and Whisper run through `core::jobs` in a
   worker process (`submagician-cli --worker`, or the AppImage with `--cli`); without the tool next
   to the app they run in-process. Stop kills the worker.

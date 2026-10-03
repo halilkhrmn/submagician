@@ -160,3 +160,22 @@ Numbered, newest last. Each: what, and why.
     place; when the system has no usable CA certificates (a minimal Linux or container), the
     Mozilla roots in `webpki-root-certs` are used instead of failing. The first release run caught
     this: the AppImage panicked at start on a clean Ubuntu container.
+52. **whisper.cpp is built for any x86-64 CPU since 2013** (`GGML_NATIVE=OFF` in
+    `.cargo/config.toml` and the release workflow: AVX, AVX2, FMA, F16C; no AVX-512). Built
+    natively on a CI runner it used the runner's AVX-512 and crashed with an illegal instruction
+    (0xC000001D) on users' PCs. `speech::cpu_supported` refuses older CPUs with a clear message
+    instead of crashing, the release fails if a CMake cache still says `GGML_NATIVE=ON`, and the
+    CI caches got a new key so no native build is reused. One portable build is a little slower
+    than a native one; runtime-dispatched variants (`GGML_CPU_ALL_VARIANTS`) need shared
+    libraries, which the single-file packages avoid.
+53. **No sidebar** (owner's feedback: the window felt crowded). The library is the window; a top
+    bar holds the folder, Open and a settings gear, and Settings has a back button. Player
+    plugins, subfolders and the folder watch moved into Settings. Languages are flags (flag-icons,
+    UK flag for English); found subtitles show a word for their fit (Exact / Good / Fair / Weak
+    from the score, explained behind a ? button) instead of the raw score.
+54. **A crashed worker is a dialog, not a log line**: `Error::Crashed` carries no stderr text (it
+    goes to the log); the app says what happened in plain words and opens the report with a note.
+    A missing speech model is asked about in a dialog where it is needed, then the work goes on.
+55. **Right-click menu entries are chosen in Settings** (open, get subtitles, sync to audio).
+    "Get" and "sync" open the window with the folder or video (`--get` / `--sync`) and start the
+    work there, so progress and errors are visible; no hidden background runs.

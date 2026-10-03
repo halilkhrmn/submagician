@@ -32,6 +32,10 @@ pub enum Error {
     NoSpeech,
     #[error("cancelled")]
     Cancelled,
+    /// The worker process died without an answer; `cpu` when the processor lacked an
+    /// instruction it was built for.
+    #[error("{}", if *cpu { "the processor does not support an instruction this needs" } else { "the background process crashed" })]
+    Crashed { cpu: bool, detail: String },
     /// A failure reported by the worker process, as text.
     #[error("{0}")]
     Other(String),
