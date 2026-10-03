@@ -1,0 +1,97 @@
+# Fedora RPM and Flatpak: built, installed on a clean system and started. Runs on pull requests
+# that change the packaging, by hand (Actions → Packaging → Run workflow), and from the release
+# workflow, which publishes what it builds (docs/RELEASING.md).
+name: Packaging
+
+on:
+  pull_request:
+    paths:
+      - "packaging/**"
+      - ".copr/**"
+      - "tools/build-flatpak.sh"
+      - "tools/smoke-linux.sh"
+      - ".github/workflows/packaging.yml"
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  SUBMAGICIAN_OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
+  SUBMAGICIAN_SUBDL_API_KEY: ${{ secrets.SUBDL_API_KEY }}
+
+jobs:
+  # The source RPM COPR builds (all crates vendored), and the RPM built from it the way COPR does.
+  fedora:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    container: fedora:latest
+    steps:
+      - name: Build tools
+        run: |
+          dnf -y install git rpm-build cargo rust gcc gcc-c++ cmake clang-devel xz \
+            fontconfig-devel libxkbcommon-devel wayland-devel desktop-file-utils libappstream-glib
+      - uses: actions/checkout@v4
+      - name: Source RPM
+        run: |
+          git config --global --add safe.directory "$PWD"
+          SUBMAGICIAN_REF=HEAD sh packaging/fedora/make-srpm.sh target/srpm
+          ls -la target/srpm
+      - name: RPM (rpmbuild --rebuild, as COPR)
+        run: |
+          rpmbuild --rebuild --define "_rpmdir $PWD/target/rpm" target/srpm/*.src.rpm
+          find target/rpm -name '*.rpm' -exec mv {} target/rpm/ \;
+          ls -la target/rpm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-fedora
+          path: target/rpm/*.rpm
+          if-no-files-found: error
+      # Not published on the release page; the release workflow sends it to COPR.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: copr-srpm
+          path: target/srpm/*.src.rpm
+          if-no-files-found: error
+
+  smoke-fedora:
+    needs: fedora
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: fedora:latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-fedora
+          path: dist
+      - name: Prepare the system
+        run: dnf -y install xorg-x11-server-Xvfb xauth
+      - name: Install and start
+        run: bash tools/smoke-linux.sh rpm "dist/submagician-[0-9]*.x86_64.rpm"
+
+  flatpak:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:freedesktop-25.08
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools for the crate list
+        run: dnf -y install python3-aiohttp python3-tomlkit || python3 -m pip install aiohttp tomlkit
+      - name: Build the bundle
+        run: ./tools/build-flatpak.sh
+      - name: Install and run the command-line tool
+        run: |
+          flatpak install --user -y --noninteractive target/flatpak/SubMagician-*.flatpak
+          flatpak run --command=submagician-cli io.github.halilkhrmn.SubMagician --version
+          flatpak run --command=submagician-cli io.github.halilkhrmn.SubMagician --help | grep -q -- "--player"
+          flatpak run --command=ffmpeg io.github.halilkhrmn.SubMagician -hide_banner -encoders | grep -q " srt "
+          flatpak run --command=ffprobe io.github.halilkhrmn.SubMagician -version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-flatpak
+          path: target/flatpak/*.flatpak
+          if-no-files-found: error

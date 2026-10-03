@@ -17,7 +17,7 @@ export component AppWindow inherits Window {
     min-height: 520px;
     background: Theme.content;
 
-    property <bool> update-banner: !AppState.update-dismissed && (AppState.update-state == 2 || AppState.update-state == 3 || AppState.update-state == 4);
+    property <bool> update-banner: !AppState.update-dismissed && (AppState.update-state == 2 || AppState.update-state == 3 || AppState.update-state == 4 || AppState.update-state == 7);
 
     VerticalLayout {
             // Top bar: where you are, opening videos, settings. In Settings: back.
@@ -90,7 +90,7 @@ export component AppWindow inherits Window {
                     IconButton {
                         icon: Icons.settings;
                         label: @tr("Settings");
-                        badge: AppState.update-state == 2 || AppState.update-state == 3;
+                        badge: AppState.update-state == 2 || AppState.update-state == 3 || AppState.update-state == 7;
                         clicked => { AppState.page = Page.settings; }
                     }
                 }
@@ -110,6 +110,7 @@ export component AppWindow inherits Window {
                     }
                     Text {
                         text: AppState.update-state == 4 ? @tr("Downloading SubMagician {}…", AppState.update-version)
+                            : AppState.update-state == 7 ? Texts.managed-update(AppState.update-version, AppState.update-flatpak)
                             : @tr("SubMagician {} is available.", AppState.update-version);
                         vertical-alignment: center;
                         horizontal-stretch: 1;

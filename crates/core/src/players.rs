@@ -106,9 +106,19 @@ fn lua_string(text: &str) -> String {
     format!("[{eq}[{text}]{eq}]")
 }
 
-/// The command the plugins run: `submagician-cli` next to the app, or the AppImage with
-/// `--cli` (its AppRun starts the tool inside). `None` when the tool is not there.
+/// The command the plugins run from outside the app. In the Flatpak sandbox that is
+/// `flatpak run --command=submagician-cli <id>`; elsewhere the same as `worker_command`.
+/// `None` when the tool is not there.
 pub fn cli_command() -> Option<Vec<String>> {
+    if let Some(id) = crate::packaging::flatpak_id() {
+        return Some(vec!["flatpak".into(), "run".into(), "--command=submagician-cli".into(), id]);
+    }
+    worker_command()
+}
+
+/// The command-line tool as this process can start it: `submagician-cli` next to the app, or
+/// the AppImage with `--cli` (its AppRun starts the tool inside).
+pub fn worker_command() -> Option<Vec<String>> {
     if let Some(appimage) = std::env::var_os("APPIMAGE") {
         return Some(vec![appimage.to_string_lossy().into_owned(), "--cli".into()]);
     }
@@ -149,11 +159,11 @@ fn short_path(path: &Path) -> Option<String> {
 /// Every supported player for this system, found or not.
 pub fn detect() -> Vec<Player> {
     let home = directories::BaseDirs::new();
-    let Some(home) = home.as_ref() else { return Vec::new() };
+    let (Some(home), Some((config, data))) = (home.as_ref(), crate::packaging::host_dirs()) else { return Vec::new() };
     detect_in(&Env {
         home: home.home_dir().to_path_buf(),
-        config: home.config_dir().to_path_buf(),
-        data: home.data_dir().to_path_buf(),
+        config,
+        data,
         path: std::env::var_os("PATH").map(|p| std::env::split_paths(&p).collect()).unwrap_or_default(),
         program_files: ["ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"]
             .iter()

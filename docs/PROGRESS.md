@@ -18,9 +18,25 @@
   - [x] First release run on GitHub (installer and packages built and smoke-tested in CI)
   - [ ] In-app update tried for real (the repository is public now; needs a second release)
   - [ ] VLC extension tried in VLC (mpv script tried end to end; VLC only syntax-checked)
+- [ ] Fedora COPR project and secret set up; Flathub submission
 - [ ] Phase 7 — macOS
 
 ## Work log
+
+### 2026-10-03 — Fedora COPR and Flatpak packaging
+- Done: `packaging/fedora/` (spec, `make-srpm.sh` with vendored crates and a changelog entry from
+  changelog/en.md), `.copr/Makefile` (SCM fallback), `packaging/flatpak/` manifest with an ffmpeg
+  module, `tools/build-flatpak.sh`, AppStream metainfo, `packaging.yml` (RPM rebuilt from the SRPM
+  and installed on a clean Fedora; Flatpak bundle installed and its tools run), release publishes
+  the RPM and the bundle and sends the SRPM to COPR (`COPR_CONFIG`). Code: `core::packaging`
+  (Flatpak/COPR detection, launch command, host folders), plugin and menu commands through
+  `flatpak run` in the sandbox, worker always the sandboxed tool, "update with your package
+  manager / flatpak update" instead of a download.
+- Verified: `make-srpm.sh` with a stub rpmbuild (sources, 65 MB vendor archive, version, changelog,
+  keys file); integration test for `flatpak run` menu entries; clippy, fmt, core tests,
+  windows-gnu check. No container runtime here: the RPM and Flatpak builds are proven by the
+  Packaging workflow on the pull request.
+- Open: COPR project + `COPR_CONFIG` secret (owner, one-time); Flathub submission.
 
 ### 2026-10-03 — 0.1.1: Whisper crash, simpler window, flags, crash dialog, menu entries
 - Found (owner's report on Windows): "From audio" killed the worker with 0xC000001D (illegal

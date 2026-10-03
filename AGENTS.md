@@ -54,6 +54,8 @@ and `libxkbcommon-dev` (runtime: `libxkbcommon-x11-0` on X11). Syncing to audio 
 | Windows compile check from Linux | `rustup target add x86_64-pc-windows-gnu`, MinGW, `cargo check --target x86_64-pc-windows-gnu` |
 | Linux packages (.deb, AppImage) | `tools/build-linux-packages.sh` (needs `cargo install cargo-deb`) |
 | Windows installer + portable zip | `tools\build-installer.ps1` (Inno Setup 6) |
+| Fedora source RPM | `sh packaging/fedora/make-srpm.sh target/srpm` (cargo, git, rpm-build), then `rpmbuild --rebuild` |
+| Flatpak bundle | `tools/build-flatpak.sh` (flatpak, flatpak-builder, python3 aiohttp + tomlkit) |
 | Release | raise the version + `changelog/en.md`, merge to main (see `docs/RELEASING.md`) |
 | Headless screenshot (Linux) | `xvfb-run -a env SLINT_BACKEND=winit-software target/debug/submagician` + `import -window root shot.png` |
 
@@ -90,6 +92,7 @@ crates/core/   submagician-core, no GUI (shared by app and CLI)
   report       "Report a problem": text, saved file, GitHub issue / mailto links
   players      mpv / mpv.net / VLC detection and plugin install (scripts from plugins/)
   net          HTTP clients (system roots, built-in Mozilla roots when the system has none)
+  packaging    Flatpak / COPR copy: launch command, host folders, who updates it
 crates/app/    submagician (binary)
   ui/app.slint  window: top bar (folder, Open, settings gear / back), update banner, dialogs
   ui/state.slint  AppState global (all properties/callbacks), Texts (state codes → @tr text)
@@ -105,7 +108,8 @@ crates/cli/    submagician-cli: same pipeline for scripts (--lang, --sources, --
 plugins/       submagician.lua (mpv) and submagician_vlc.lua (VLC), filled in at install
 changelog/     en.md: release notes (What's new in the app, GitHub release text)
 installer/     submagician.iss (Inno Setup, per user, ffmpeg bundled)
-packaging/     linux/submagician.desktop
+packaging/     linux/ (desktop file, AppStream metainfo), fedora/ (spec, make-srpm.sh; .copr/),
+               flatpak/ (manifest; tools/build-flatpak.sh)
 tools/         build-installer.ps1, build-linux-packages.sh, smoke tests
 site/          landing page (GitHub Pages, .github/workflows/pages.yml), logo.svg = app icon
 docs/          PLAN, PROGRESS, DECISIONS, RELEASING

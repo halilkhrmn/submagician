@@ -3,6 +3,14 @@
 Release notes, newest first. The app shows the sections since the version that ran before
 ("What's new"), and the release workflow uses the section of the released version.
 
+## 0.1.2
+- A small ? next to the buttons and fields that need it: point at it to see what they do.
+  The ? next to "Subtitles found" explains Exact, Good, Fair and Weak.
+- "Write from speech" is now "Create subtitle from audio". The timing tools fold away under
+  "Timing", and the video's details take two lines, so the found subtitles get more room.
+- New packages: Fedora (COPR repository and .rpm) and Flatpak. Copies that dnf or Flatpak
+  update say so instead of offering a download.
+
 ## 0.1.1
 - Fixed: writing a subtitle from the speech ("From audio") crashed on many processors (the speech engine was built for the build
   server's processor). It now works on any 64-bit PC from 2013 on, and says so clearly when a

@@ -18,6 +18,7 @@ pub mod media;
 pub mod name;
 mod net;
 pub mod output;
+pub mod packaging;
 pub mod players;
 pub mod probe;
 pub mod provider;

@@ -1,6 +1,6 @@
 import { Button, LineEdit, Switch, CheckBox, ComboBox, ScrollView, Palette } from "std-widgets.slint";
 import { Theme, Icons } from "theme.slint";
-import { AppState } from "state.slint";
+import { AppState, Texts } from "state.slint";
 import { Card, SettingRow, Glyph, Note } from "components.slint";
 import { PlayersSection } from "players.slint";
 
@@ -314,6 +314,7 @@ export component SettingsPage inherits VerticalLayout {
                     title: @tr("Version {}", AppState.version);
                     description: AppState.update-state == 1 ? @tr("Checking…")
                         : AppState.update-state == 2 || AppState.update-state == 3 ? @tr("Version {} is available.", AppState.update-version)
+                        : AppState.update-state == 7 ? Texts.managed-update(AppState.update-version, AppState.update-flatpak)
                         : AppState.update-state == 4 ? @tr("Downloading version {}…", AppState.update-version)
                         : AppState.update-state == 6 ? @tr("Could not check: {}", AppState.update-error)
                         : "";
@@ -331,7 +332,7 @@ export component SettingsPage inherits VerticalLayout {
                         primary: true;
                         clicked => { AppState.open-release(); }
                     }
-                    if AppState.update-state != 2 && AppState.update-state != 3: Button {
+                    if AppState.update-state != 2 && AppState.update-state != 3 && AppState.update-state != 7: Button {
                         text: @tr("Check now");
                         enabled: AppState.update-state != 1 && AppState.update-state != 4;
                         clicked => { AppState.check-for-update(); }

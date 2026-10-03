@@ -9,5 +9,5 @@ info → info, warning → warning, error → error_circle, plug → plug_connec
 update → arrow_circle_up, captions → closed_caption, speaker → speaker_2, clock → clock,
 globe → globe, person → person, logs → document_text, mail → mail, open → open,
 dismiss → dismiss, delete → delete, filter → filter, heart → heart, code → code,
-done → checkmark_circle (filled), back → arrow_left, more → more_horizontal,
-sad → emoji_sad, question → question_circle.
+done → checkmark_circle (filled), back → arrow_left, sad → emoji_sad,
+question → question_circle, chevron-down / chevron-up → chevron_down / chevron_up.

@@ -179,3 +179,20 @@ Numbered, newest last. Each: what, and why.
 55. **Right-click menu entries are chosen in Settings** (open, get subtitles, sync to audio).
     "Get" and "sync" open the window with the folder or video (`--get` / `--sync`) and start the
     work there, so progress and errors are visible; no hidden background runs.
+56. **A small "?" (`HelpTip`) next to the controls that need explaining**, showing a tooltip
+    (Slint 1.18's built-in `Tooltip`) on hover, so the help can be found; the buttons carry a
+    short tooltip too; labels say what happens ("Create subtitle from audio", "Copy timing…"). Timing
+    tools are folded under one "Timing" line, so the found subtitles get the height.
+57. **Fedora through COPR, built from a source RPM made in CI**: `make-srpm.sh` vendors every crate
+    (Windows import libraries left out) and the release workflow sends the SRPM with `copr-cli`
+    (secret `COPR_CONFIG`), so COPR builds get the provider keys like the other packages and never
+    need network. COPR's SCM/make_srpm method stays as a fallback without keys. The release also
+    publishes the RPM built from that SRPM, after a clean Fedora install test. dnf updates COPR
+    copies, so they are built with `SUBMAGICIAN_PACKAGER` and the app does not offer downloads.
+58. **Flatpak on freedesktop 25.08 with its own small ffmpeg** (programs only, native decoders,
+    srt/ass/PCM out): the runtime has no ffmpeg program. The sandbox gets the home folder and
+    removable drives, because subtitles are written next to videos opened from anywhere (a portal
+    would give access only to the picked files). Inside it, commands for other programs (player
+    plugins, right-click menu) are `flatpak run …`, the worker is the sandboxed tool itself, and
+    player/file-manager folders are the host's `~/.config` / `~/.local/share`. The release
+    publishes a bundle; Flathub is a manual one-time submission (docs/RELEASING.md).

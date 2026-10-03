@@ -204,6 +204,9 @@ export component IconButton inherits Rectangle {
         mouse-cursor: pointer;
         clicked => { root.clicked(); }
     }
+    if root.label != "": Tooltip {
+        text: @markdown("\{root.label}");
+    }
     if root.badge: Rectangle {
         x: parent.width - 10px;
         y: 4px;
@@ -417,5 +420,22 @@ export component CandidateCard inherits Rectangle {
                 tone: root.fit;
             }
         }
+    }
+}
+
+// A small "?" next to a control: hovering it explains the control.
+export component HelpTip inherits Rectangle {
+    in property <styled-text> text;
+    width: 18px;
+    height: 18px;
+    accessible-role: AccessibleRole.text;
+    Glyph {
+        source: Icons.question;
+        size: 16px;
+        color: touch.has-hover ? Palette.accent-background : Theme.muted;
+    }
+    touch := TouchArea { mouse-cursor: help; }
+    Tooltip {
+        text: root.text;
     }
 }

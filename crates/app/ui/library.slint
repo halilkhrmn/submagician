@@ -1,14 +1,15 @@
 import { Button, LineEdit, CheckBox, ListView, Palette } from "std-widgets.slint";
 import { Theme, Icons } from "theme.slint";
 import { AppState, Texts } from "state.slint";
-import { Card, EmptyState, FileCard, CandidateCard, Glyph, Badge, ProgressBar, LangFlags, IconButton } from "components.slint";
+import { Card, EmptyState, FileCard, CandidateCard, Glyph, Badge, ProgressBar, LangFlags, IconButton, HelpTip } from "components.slint";
 
 // The selected video: what it has, the subtitles the sources offer, and its timing.
 component DetailsPanel inherits VerticalLayout {
     property <int> index: AppState.selected-file;
     property <bool> has-file: index >= 0 && index < AppState.files.length;
     property <bool> has-subtitle: has-file && AppState.files[index].existing != "";
-    property <bool> show-legend;
+    // The timing tools are folded away until asked for.
+    property <bool> timing-open;
     spacing: 10px;
 
     if !has-file: Card {
@@ -21,75 +22,61 @@ component DetailsPanel inherits VerticalLayout {
         }
     }
 
+    // What the video is and has: two lines.
     if has-file: Card {
-        inner-spacing: 6px;
+        inner-padding: 10px;
+        inner-spacing: 4px;
         HorizontalLayout {
-            spacing: 4px;
+            spacing: 2px;
             Text {
                 text: AppState.files[index].name;
-                font-size: 14px;
+                font-size: 13px;
                 font-weight: 600;
-                // Release names have no spaces to break at; the list shows them whole.
                 overflow: elide;
+                vertical-alignment: center;
                 horizontal-stretch: 1;
             }
-            VerticalLayout {
-                alignment: start;
-                IconButton {
-                    icon: Icons.play;
-                    label: @tr("Play");
-                    clicked => { AppState.play(index); }
-                }
+            IconButton {
+                icon: Icons.play;
+                label: @tr("Play the video");
+                clicked => { AppState.play(index); }
             }
-            VerticalLayout {
-                alignment: start;
-                IconButton {
-                    icon: Icons.folder;
-                    label: @tr("Show in folder");
-                    clicked => { AppState.reveal(index); }
-                }
+            IconButton {
+                icon: Icons.folder;
+                label: @tr("Show it in its folder");
+                clicked => { AppState.reveal(index); }
             }
-        }
-        Text {
-            text: Texts.file-state(AppState.files[index].state, AppState.files[index].detail)
-                + (AppState.files[index].progress >= 0 ? "  " + round(AppState.files[index].progress * 100) + "%" : "");
-            color: Theme.tone-color(Texts.file-tone(AppState.files[index].state));
-            font-size: 12px;
-            font-weight: 600;
-            wrap: word-wrap;
-        }
-        if AppState.files[index].progress >= 0: ProgressBar {
-            value: AppState.files[index].progress;
-        }
-        HorizontalLayout {
-            spacing: 8px;
-            Text {
-                text: AppState.files[index].existing == "" ? @tr("No subtitle next to it") : @tr("Has:");
-                font-size: 12px;
-                color: Theme.muted;
-                vertical-alignment: center;
-                horizontal-stretch: 0;
-            }
-            LangFlags { codes: AppState.files[index].existing-langs; }
-            if AppState.files[index].embedded != "": Text {
-                text: @tr("Inside the video:");
-                font-size: 12px;
-                color: Theme.muted;
-                vertical-alignment: center;
-                horizontal-stretch: 0;
-            }
-            LangFlags { codes: AppState.files[index].embedded-langs; }
-            Rectangle { horizontal-stretch: 1; }
-        }
-        if AppState.files[index].embedded != "": HorizontalLayout {
-            alignment: start;
-            Button {
-                text: @tr("Use the subtitle inside");
+            if AppState.files[index].embedded != "": IconButton {
                 icon: Icons.sync;
-                colorize-icon: true;
+                label: @tr("Use the subtitle inside the video (saved as a file, synced)");
                 enabled: !AppState.busy;
                 clicked => { AppState.use-embedded(index); }
             }
+        }
+        HorizontalLayout {
+            spacing: 6px;
+            Text {
+                text: Texts.file-state(AppState.files[index].state, AppState.files[index].detail)
+                    + (AppState.files[index].progress >= 0 ? "  " + round(AppState.files[index].progress * 100) + "%" : "");
+                color: Theme.tone-color(Texts.file-tone(AppState.files[index].state));
+                font-size: 12px;
+                font-weight: 600;
+                overflow: elide;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            LangFlags { codes: AppState.files[index].existing-langs; }
+            if AppState.files[index].embedded != "": HorizontalLayout {
+                spacing: 3px;
+                VerticalLayout {
+                    alignment: center;
+                    Glyph { source: Icons.video; size: 12px; color: Theme.muted; }
+                }
+                LangFlags { codes: AppState.files[index].embedded-langs; faded: true; }
+            }
+        }
+        if AppState.files[index].progress >= 0: ProgressBar {
+            value: AppState.files[index].progress;
         }
     }
 
@@ -109,28 +96,30 @@ component DetailsPanel inherits VerticalLayout {
                 vertical-alignment: center;
                 horizontal-stretch: 1;
             }
-            IconButton {
-                icon: Icons.question;
-                label: @tr("What do Exact, Good, Fair and Weak mean?");
-                clicked => { root.show-legend = !root.show-legend; }
+            VerticalLayout {
+                alignment: center;
+                HelpTip {
+                    text: @markdown("\{@tr("How well each subtitle fits this video, best first:")}\n\n**\{@tr("Exact")}**: \{@tr("made for this very file, so its timing fits")}\n\n**\{@tr("Good")}**: \{@tr("the same release (group and source)")}\n\n**\{@tr("Fair")}**: \{@tr("the same kind of release")}\n\n**\{@tr("Weak")}**: \{@tr("only the name matches; syncing to the audio usually fixes its timing")}");
+                }
             }
             IconButton {
                 icon: Icons.refresh;
-                label: @tr("Search again");
+                label: @tr("Search the sources again");
                 enabled: !AppState.busy;
                 clicked => { AppState.search-file(index); }
             }
         }
-        if root.show-legend: Text {
-            text: @tr("How well each subtitle fits this video, best first. Exact: made for this very file, so its timing fits. Good: same release (group and source). Fair: same kind of release. Weak: only the name matches; syncing to the audio usually fixes its timing.");
-            font-size: 11px;
-            color: Theme.muted;
-            wrap: word-wrap;
-        }
-        search-as-edit := LineEdit {
-            enabled: !AppState.busy;
-            placeholder-text: @tr("Wrong film? Search as… (e.g. The Office US S03E07)");
-            accepted(text) => { AppState.search-as(index, text); }
+        HorizontalLayout {
+            spacing: 6px;
+            search-as-edit := LineEdit {
+                enabled: !AppState.busy;
+                placeholder-text: @tr("Wrong film? Search as… (e.g. The Office US S03E07)");
+                accepted(text) => { AppState.search-as(index, text); }
+            }
+            VerticalLayout {
+                alignment: center;
+                HelpTip { text: @markdown("\{@tr("When the file name is wrong or unclear:")}\n\n\{@tr("type the film or episode (title, year or S01E02) and press Enter to search under that name.")}"); }
+            }
         }
         Rectangle {
             vertical-stretch: 1;
@@ -145,7 +134,7 @@ component DetailsPanel inherits VerticalLayout {
                 icon-size: 28px;
                 title: AppState.files[index].state == 0 ? @tr("Not searched yet") : @tr("No subtitles found");
                 subtitle: AppState.files[index].state == 0 ? @tr("Selecting a video searches for it.")
-                    : @tr("Try \"Search as…\" with the show or film name, or write one from the speech.");
+                    : @tr("Try \"Search as…\" with the show or film name, or create one from the video's audio.");
             }
             ListView {
                 for row[i] in AppState.candidates: CandidateCard {
@@ -159,20 +148,21 @@ component DetailsPanel inherits VerticalLayout {
                 }
             }
         }
-        Text {
-            text: @tr("None fits? \"Write from speech\" listens to the video and writes the subtitle itself, on this computer (a few minutes).");
-            font-size: 11px;
-            color: Theme.muted;
-            wrap: word-wrap;
-        }
         HorizontalLayout {
             spacing: 8px;
             Button {
-                text: @tr("Write from speech");
+                text: @tr("Create subtitle from audio");
                 icon: Icons.mic;
                 colorize-icon: true;
                 enabled: !AppState.busy;
                 clicked => { AppState.generate(index); }
+                Tooltip {
+                    text: @markdown("\{@tr("Listens to the video's audio and writes the subtitle, on this computer (a few minutes).")}");
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                HelpTip { text: @markdown("\{@tr("No subtitle fits?")}\n\n\{@tr("SubMagician listens to the video's audio and writes the subtitle itself with Whisper, on this computer.")}\n\n\{@tr("It takes a few minutes; the first time it downloads the speech model.")}"); }
             }
             Rectangle { horizontal-stretch: 1; }
             Button {
@@ -182,27 +172,65 @@ component DetailsPanel inherits VerticalLayout {
                 primary: true;
                 enabled: !AppState.busy && AppState.selected-candidate >= 0;
                 clicked => { AppState.download-candidate(AppState.selected-candidate); }
+                Tooltip {
+                    text: @markdown("\{@tr("Saves the selected subtitle next to the video (or double-click it).")}");
+                }
             }
         }
     }
 
+    // Timing: one header line, the tools open with it.
     if has-file && has-subtitle: Card {
+        inner-padding: 10px;
         inner-spacing: 8px;
-        Text {
-            text: @tr("Out of sync? \"Sync to audio\" listens to the video and fixes the timing. \"Copy timing…\" takes it from another subtitle file that is in sync.");
-            font-size: 11px;
-            color: Theme.muted;
-            wrap: word-wrap;
+        Rectangle {
+            height: 28px;
+            TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.timing-open = !root.timing-open; }
+            }
+            HorizontalLayout {
+                spacing: 6px;
+                VerticalLayout {
+                    alignment: center;
+                    Glyph { source: Icons.clock; size: 16px; color: Palette.accent-background; }
+                }
+                Text {
+                    text: @tr("Timing");
+                    font-size: 14px;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: root.timing-open ? "" : @tr("Subtitle out of sync? Fix it here.");
+                    font-size: 11px;
+                    color: Theme.muted;
+                    vertical-alignment: center;
+                    overflow: elide;
+                    horizontal-stretch: 1;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Glyph { source: root.timing-open ? Icons.chevron-up : Icons.chevron-down; size: 16px; }
+                }
+            }
         }
-        HorizontalLayout {
+        if root.timing-open: HorizontalLayout {
             spacing: 6px;
             Button {
-                text: @tr("Sync to audio");
+                text: @tr("Sync to the audio");
                 icon: Icons.speaker;
                 colorize-icon: true;
                 horizontal-stretch: 1;
                 enabled: !AppState.busy;
                 clicked => { AppState.sync-audio(index); }
+                Tooltip {
+                    text: @markdown("\{@tr("Moves the subtitle to match the speech in the video.")}");
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                HelpTip { text: @markdown("\{@tr("Sync to the audio:")}\n\n\{@tr("listens to the video and moves the subtitle to the speech (offset, frame rate, cut scenes).")}\n\n\{@tr("It is changed only when it fits better.")}"); }
             }
             Button {
                 text: @tr("Copy timing…");
@@ -211,27 +239,35 @@ component DetailsPanel inherits VerticalLayout {
                 horizontal-stretch: 1;
                 enabled: !AppState.busy;
                 clicked => { AppState.sync-reference(index); }
+                Tooltip {
+                    text: @markdown("\{@tr("Takes the timing from another subtitle file that is already in sync.")}");
+                }
             }
-            IconButton {
-                icon: Icons.restore;
-                label: @tr("Put back the previous subtitle");
-                enabled: !AppState.busy;
-                clicked => { AppState.restore(index); }
+            VerticalLayout {
+                alignment: center;
+                HelpTip { text: @markdown("\{@tr("Copy timing:")}\n\n\{@tr("pick another subtitle file that is in sync with this video, in any language;")}\n\n\{@tr("its timing is copied to this one.")}"); }
             }
         }
-        HorizontalLayout {
+        if root.timing-open: HorizontalLayout {
             spacing: 4px;
-            Text {
-                text: @tr("Move:");
-                vertical-alignment: center;
-                color: Theme.muted;
-                font-size: 12px;
-            }
             for step in [-1000, -100, 100, 1000]: Button {
                 text: (step > 0 ? "+" : "−") + abs(step / 1000) + " s";
                 horizontal-stretch: 1;
                 enabled: !AppState.busy;
                 clicked => { AppState.shift(index, step); }
+                Tooltip {
+                    text: @markdown("\{step < 0 ? @tr("Show the subtitle earlier") : @tr("Show the subtitle later")}");
+                }
+            }
+            IconButton {
+                icon: Icons.restore;
+                label: @tr("Undo: put back the subtitle that was there before");
+                enabled: !AppState.busy;
+                clicked => { AppState.restore(index); }
+            }
+            VerticalLayout {
+                alignment: center;
+                HelpTip { text: @markdown("\{@tr("Move the subtitle by hand: minus shows it earlier, plus later.")}\n\n\{@tr("The arrow puts back the subtitle that was there before.")}"); }
             }
         }
     }
@@ -272,6 +308,13 @@ export component LibraryPage inherits VerticalLayout {
             primary: true;
             enabled: AppState.files.length > 0;
             clicked => { AppState.download-all(); }
+            Tooltip {
+                text: @markdown("\{@tr("Saves the best subtitle in your languages next to every video.")}");
+            }
+        }
+        if !AppState.busy: VerticalLayout {
+            alignment: center;
+            HelpTip { text: @markdown("\{@tr("Get subtitles for all:")}\n\n\{@tr("finds the best subtitle in your languages for every video, saves it next to the video and syncs it to the audio.")}\n\n\{@tr("Videos that already have one are skipped (Settings → Subtitles).")}"); }
         }
         if !AppState.busy: Button {
             text: @tr("Search all");
@@ -279,6 +322,13 @@ export component LibraryPage inherits VerticalLayout {
             colorize-icon: true;
             enabled: AppState.files.length > 0;
             clicked => { AppState.search-all(); }
+            Tooltip {
+                text: @markdown("\{@tr("Only shows what the sources have; nothing is downloaded.")}");
+            }
+        }
+        if !AppState.busy: VerticalLayout {
+            alignment: center;
+            HelpTip { text: @markdown("\{@tr("Search all: only looks.")}\n\n\{@tr("Every video shows how many subtitles the sources have;")}\n\n\{@tr("nothing is downloaded.")}"); }
         }
         if AppState.busy: Button {
             text: @tr("Stop");

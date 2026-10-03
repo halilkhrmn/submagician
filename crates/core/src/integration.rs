@@ -6,9 +6,12 @@
 //!   files (no admin rights needed).
 //! - Linux: a launcher in `applications/` (so "Open with" lists SubMagician for folders and
 //!   videos, and they can be dropped on its icon), a Nautilus/Nemo/Caja script and a Dolphin
-//!   service menu.
+//!   service menu. The Flatpak exports its own launcher, so it adds only the menus, which start
+//!   it through `flatpak run`.
+//!
+//! The entries run `command` (`packaging::launch_command`) with the action's flag and the path.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::Result;
 
@@ -78,14 +81,6 @@ impl MenuEntries {
     }
 }
 
-/// The program the menu entries start: the AppImage when running from one, else this executable.
-pub fn current_program() -> Option<PathBuf> {
-    if let Some(appimage) = std::env::var_os("APPIMAGE") {
-        return Some(PathBuf::from(appimage));
-    }
-    std::env::current_exe().ok()
-}
-
 #[cfg(not(windows))]
 pub use unix::{install, is_installed, uninstall};
 #[cfg(windows)]
@@ -103,6 +98,8 @@ mod unix {
     const OLD_SCRIPTS: [&str; 1] = ["Find subtitles with SubMagician"];
     const ALL: [Action; 3] = [Action::Open, Action::Get, Action::Sync];
 
+    use std::path::Path;
+
     fn launcher(data: &Path) -> PathBuf {
         data.join("applications/submagician.desktop")
     }
@@ -112,24 +109,28 @@ mod unix {
     }
 
     fn data_dir() -> Option<PathBuf> {
-        directories::BaseDirs::new().map(|d| d.data_dir().to_path_buf())
+        crate::packaging::host_dirs().map(|(_, data)| data)
     }
 
-    /// `"path"` with the quoting rules of desktop entries.
-    fn quoted(program: &Path) -> String {
-        let s = program.display().to_string();
-        format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"").replace('`', "\\`").replace('$', "\\$"))
+    /// `"text"` with the quoting rules of desktop entries (also fine for sh).
+    fn quoted(text: &str) -> String {
+        format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\"").replace('`', "\\`").replace('$', "\\$"))
     }
 
-    fn exec(program: &Path, action: Action, arg: &str) -> String {
-        match action.flag() {
-            Some(flag) => format!("{} {flag} {arg}", quoted(program)),
-            None => format!("{} {arg}", quoted(program)),
+    /// The command line for `action` on `arg` (a field code like `%f`, or "" for scripts).
+    fn exec(command: &[String], action: Action, arg: &str) -> String {
+        let mut parts: Vec<String> = command.iter().map(|c| quoted(c)).collect();
+        parts.extend(action.flag().map(String::from));
+        if !arg.is_empty() {
+            parts.push(arg.into());
         }
+        parts.join(" ")
     }
 
-    pub fn install(program: &Path, entries: MenuEntries) -> Result<()> {
-        install_into(&data_dir().ok_or_else(no_home)?, program, entries)
+    pub fn install(command: &[String], entries: MenuEntries) -> Result<()> {
+        // The Flatpak's own launcher already offers it for folders and videos.
+        let launcher = crate::packaging::flatpak_id().is_none();
+        install_into(&data_dir().ok_or_else(no_home)?, command, entries, launcher)
     }
 
     pub fn uninstall() -> Result<()> {
@@ -137,24 +138,35 @@ mod unix {
     }
 
     pub fn is_installed() -> bool {
-        data_dir().is_some_and(|d| launcher(&d).is_file())
+        data_dir().is_some_and(|d| {
+            launcher(&d).is_file()
+                || service_menu(&d).is_file()
+                || SCRIPT_DIRS.iter().any(|dir| ALL.iter().any(|a| d.join(dir).join(a.label()).is_file()))
+        })
     }
 
     fn no_home() -> crate::Error {
         crate::Error::Io(std::io::Error::other("no home folder"))
     }
 
-    pub(super) fn install_into(data: &Path, program: &Path, entries: MenuEntries) -> Result<()> {
+    pub(super) fn install_into(
+        data: &Path,
+        command: &[String],
+        entries: MenuEntries,
+        with_launcher: bool,
+    ) -> Result<()> {
         // Start clean, so entries switched off disappear.
         uninstall_from(data)?;
-        write(
-            &launcher(data),
-            &format!(
-                "[Desktop Entry]\nType=Application\nName=SubMagician\nComment=Find, pick and sync subtitles\nExec={}\nIcon=video-x-generic\nTerminal=false\nCategories=AudioVideo;Video;\nMimeType={MIME}\nNoDisplay=false\n",
-                exec(program, Action::Open, "%f")
-            ),
-            false,
-        )?;
+        if with_launcher {
+            write(
+                &launcher(data),
+                &format!(
+                    "[Desktop Entry]\nType=Application\nName=SubMagician\nComment=Find, pick and sync subtitles\nExec={}\nIcon=video-x-generic\nTerminal=false\nCategories=AudioVideo;Video;\nMimeType={MIME}\nNoDisplay=false\n",
+                    exec(command, Action::Open, "%f")
+                ),
+                false,
+            )?;
+        }
         let chosen = entries.chosen();
         for dir in SCRIPT_DIRS {
             // Only for file managers that are there: their scripts folder's parent exists.
@@ -163,8 +175,8 @@ mod unix {
             }
             for action in &chosen {
                 let script = format!(
-                    "#!/bin/sh\n# Added by SubMagician (Settings → File manager).\nexec {} \"$1\"\n",
-                    exec(program, *action, "").trim_end()
+                    "#!/bin/sh\n# Added by SubMagician (Settings → Right-click menu).\nexec {} \"$1\"\n",
+                    exec(command, *action, "")
                 );
                 write(&data.join(dir).join(action.label()), &script, true)?;
             }
@@ -179,7 +191,7 @@ mod unix {
                 menu += &format!(
                     "\n[Desktop Action {id}]\nName={}\nIcon=video-x-generic\nExec={}\n",
                     action.label(),
-                    exec(program, *action, "%f")
+                    exec(command, *action, "%f")
                 );
             }
             write(&service_menu(data), &menu, true)?;
@@ -222,8 +234,8 @@ mod unix {
             let data = std::env::temp_dir().join(format!("submagician-integration-{}", std::process::id()));
             let _ = fs::remove_dir_all(&data);
             fs::create_dir_all(data.join("nautilus")).unwrap(); // GNOME Files is "installed", Nemo is not
-            let program = Path::new("/opt/Sub Magician/submagician");
-            install_into(&data, program, MenuEntries::default()).unwrap();
+            let program = vec!["/opt/Sub Magician/submagician".to_owned()];
+            install_into(&data, &program, MenuEntries::default(), true).unwrap();
 
             let launcher = fs::read_to_string(data.join("applications/submagician.desktop")).unwrap();
             assert!(launcher.contains("Exec=\"/opt/Sub Magician/submagician\" %f"), "{launcher}");
@@ -239,7 +251,7 @@ mod unix {
             assert!(menu.contains("Exec=\"/opt/Sub Magician/submagician\" --sync %f"), "{menu}");
 
             // Switching an entry off removes it.
-            install_into(&data, program, MenuEntries { open: true, get: false, sync: false }).unwrap();
+            install_into(&data, &program, MenuEntries { open: true, get: false, sync: false }, true).unwrap();
             assert!(open.exists());
             assert!(!data.join("nautilus/scripts/Get subtitles with SubMagician").exists());
             let menu = fs::read_to_string(data.join("kio/servicemenus/submagician.desktop")).unwrap();
@@ -249,12 +261,22 @@ mod unix {
             assert!(!data.join("applications/submagician.desktop").exists());
             assert!(!open.exists());
             uninstall_from(&data).unwrap(); // twice is fine
+
+            // Flatpak: no launcher of its own, the menus run `flatpak run`.
+            let flatpak: Vec<String> = ["flatpak", "run", "io.github.halilkhrmn.SubMagician"].map(String::from).into();
+            install_into(&data, &flatpak, MenuEntries::default(), false).unwrap();
+            assert!(!data.join("applications/submagician.desktop").exists());
+            let get = fs::read_to_string(data.join("nautilus/scripts/Get subtitles with SubMagician")).unwrap();
+            assert!(
+                get.contains("exec \"flatpak\" \"run\" \"io.github.halilkhrmn.SubMagician\" --get \"$1\""),
+                "{get}"
+            );
             fs::remove_dir_all(&data).unwrap();
         }
 
         #[test]
         fn quotes_for_desktop_entries() {
-            assert_eq!(quoted(Path::new("/a b/$x\"y")), "\"/a b/\\$x\\\"y\"");
+            assert_eq!(quoted("/a b/$x\"y"), "\"/a b/\\$x\\\"y\"");
         }
     }
 }
@@ -293,9 +315,9 @@ mod windows {
         Ok(status.success())
     }
 
-    pub fn install(program: &Path, entries: MenuEntries) -> Result<()> {
+    pub fn install(command: &[String], entries: MenuEntries) -> Result<()> {
         uninstall()?;
-        let exe = program.display().to_string();
+        let exe = command.first().cloned().unwrap_or_default();
         for action in entries.chosen() {
             for (place, arg) in PLACES {
                 let key = format!(r"{place}\{}", key_name(action));
