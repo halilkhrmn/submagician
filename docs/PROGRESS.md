@@ -14,10 +14,34 @@
   - [ ] Windows: Explorer menu entries and drag & drop tried on a real machine
 - [x] Phase 5 — Speech: Whisper write-from-audio (app, batch/watch fallback, CLI)
   - [ ] Try on real films with base/small models (speed and quality on a normal PC)
-- [ ] Phase 6 — Packaging for Windows and Linux
+- [x] Phase 6 — Packaging, updates, logs, new interface, player plugins, fast sync
+  - [ ] First release run on GitHub (installer and packages built and smoke-tested in CI)
+  - [ ] In-app update tried for real (needs a public release: the repository is private)
+  - [ ] VLC extension tried in VLC (mpv script tried end to end; VLC only syntax-checked)
 - [ ] Phase 7 — macOS
 
 ## Work log
+
+### 2026-10-02 — Phase 6: packaging, updates, logs, new interface, plugins, fast sync
+- Done: `core::applog` (errors.log always, daily files on request, panics), `update` (GitHub
+  release check, SHA-256 checked download, silent installer / AppImage swap), `whatsnew`,
+  `report`; new interface (sidebar with Library / Player plugins / Settings, file cards with
+  status and progress, details panel, settings in cards incl. Updates, Logs and problems, About;
+  What's new and Report dialogs; settings saved as they change); player plugins (mpv/mpv.net
+  Lua script, VLC Lua extension, `submagician-cli --player`, install/remove in the app, refreshed
+  at start); `autosync` (quick look at 10 windows, parallel full read, speech cache on disk);
+  subtitles inside videos (`probe::subtitle_tracks/pick/extract`, "Use the subtitle inside",
+  CLI `--from-video`); `jobs` + worker process (`--worker`) with progress on every video;
+  packaging (Inno Setup per user with ffmpeg, portable zip, .deb, AppImage with `--cli`),
+  `release.yml` with smoke tests, `docs/RELEASING.md`, icons.
+- Verified: unit tests (applog, update, whatsnew, report, players, quick fit, jobs incl. a
+  crashing and a stopped worker, probe/extract); end-to-end 20-minute synthetic film: wrong frame
+  rate + offset fixed by the quick look in 0.4 s, a cut scene by the parallel full read in 1.4 s,
+  then from the cache; the app under Xvfb (pages, What's new, Report dialog, progress on a 1-hour
+  file, "Use the subtitle inside" fixing a 3.8 s late track); mpv 0.37 with the installed script:
+  the video started, the CLI wrote a subtitle and mpv loaded it (2.3 s); Lua syntax of both
+  plugins; .deb and AppImage built locally.
+- Open: the first release run in CI; in-app updates need public releases; VLC tried for real.
 
 ### 2026-10-02 — Phase 5 Whisper
 - Done: `core::speech` (models, download, pieces cut at silence, VAD-snapped segments, sound tags

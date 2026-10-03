@@ -1,5 +1,8 @@
 //! `submagician-cli`: the app's search → pick → save → sync, for scripts and file-manager actions.
 //! Uses the same settings file as the app (languages, logins, sources, ffmpeg).
+//!
+//! `--player` is the mode the mpv and VLC plugins use (see `crates/core/src/players.rs`): one
+//! video, machine-readable output.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -7,16 +10,18 @@ use std::process::ExitCode;
 use std::sync::atomic::AtomicBool;
 
 use clap::Parser;
+
+mod player;
 use submagician_core::engine::Engine;
 use submagician_core::media::{self, MediaFile};
 use submagician_core::settings::Settings;
-use submagician_core::{Error, audio, lang, output, probe, score, speech, sync};
+use submagician_core::{Error, audio, autosync, jobs, lang, output, probe, score, speech, sync};
 
 #[derive(Parser, Debug)]
 #[command(name = "submagician-cli", version, about = "Find, pick, fix and sync subtitles for videos")]
 struct Args {
     /// Video files or folders.
-    #[arg(required_unless_present = "download_model")]
+    #[arg(required_unless_present_any = ["download_model", "worker"])]
     paths: Vec<PathBuf>,
     /// Wanted languages, most wanted first, e.g. "tr,en" (default: the app's setting).
     #[arg(short, long)]
@@ -48,11 +53,31 @@ struct Args {
     /// Download a Whisper model and exit.
     #[arg(long, value_name = "MODEL")]
     download_model: Option<String>,
+    /// When a video has a text subtitle track inside in a wanted language, take it out as a
+    /// file next to the video and sync it, instead of downloading one.
+    #[arg(long)]
+    from_video: bool,
+    /// Internal: run one job for the app (JSON) and print its progress.
+    #[arg(long, hide = true, value_name = "JOB")]
+    worker: Option<String>,
+    /// For player plugins: one video (a path or a file:// URI); prints `subtitle<TAB>path` for
+    /// the subtitle to load and `message<TAB>text` for the player to show.
+    #[arg(long)]
+    player: bool,
+    /// With --player: the video just started; do nothing when it already has a subtitle in the
+    /// first language (next to it or inside it).
+    #[arg(long, requires = "player")]
+    auto: bool,
 }
 
 fn main() -> ExitCode {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("error")).init();
     let args = Args::parse();
+    if let Some(job) = &args.worker {
+        // The app shows these lines in its own log.
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+        return if submagician_core::jobs::serve(job) { ExitCode::SUCCESS } else { ExitCode::from(1) };
+    }
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("error")).init();
     if let Some(id) = &args.download_model {
         return download_model(id);
     }
@@ -76,6 +101,10 @@ fn main() -> ExitCode {
     if lang::parse_list(&settings.languages).is_empty() {
         eprintln!("no known language in {:?}", settings.languages);
         return ExitCode::from(2);
+    }
+    if args.player {
+        let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().expect("tokio runtime");
+        return runtime.block_on(player::run(&args, &settings));
     }
     let videos = collect(&args.paths, !args.no_recursive);
     if videos.is_empty() {
@@ -189,6 +218,33 @@ async fn run(args: &Args, settings: &Settings, videos: Vec<MediaFile>) -> ExitCo
         if let Some(ffprobe) = &ffprobe {
             video.embedded = probe::embedded_languages(ffprobe, &video.path).unwrap_or_default();
         }
+        if args.from_video
+            && !args.dry_run
+            && let (Some(ffmpeg), Some(ffprobe)) = (&ffmpeg, &ffprobe)
+            && video.embedded.iter().any(|l| languages.iter().any(|w| w == l))
+            && !video.existing.iter().any(|s| s.language == Some(languages[0].as_str()))
+        {
+            let job = jobs::Job::Embedded {
+                video: video.path.clone(),
+                ffmpeg: ffmpeg.clone(),
+                ffprobe: ffprobe.clone(),
+                languages: languages.clone(),
+            };
+            match jobs::run(&job, Default::default(), std::sync::Arc::new(|_| {})) {
+                Ok(jobs::Done::Extracted { path, report, sync_error, .. }) => {
+                    let note = match (report, sync_error) {
+                        (Some(r), _) => report_note(&r),
+                        (None, Some(e)) => format!(", not synced: {e}"),
+                        _ => String::new(),
+                    };
+                    println!("[video] {name} -> {} (the track inside{note})", file_name(&path));
+                    tally.saved += 1;
+                    continue;
+                }
+                Ok(_) => {}
+                Err(e) => eprintln!("{name}: track inside not used: {e}"),
+            }
+        }
         if !args.force && video.has_language(&languages[0]) {
             println!("[skip]  {name}: already has {}", languages[0]);
             tally.skipped += 1;
@@ -252,27 +308,25 @@ async fn run(args: &Args, settings: &Settings, videos: Vec<MediaFile>) -> ExitCo
 }
 
 /// Writes a subtitle from the audio and saves it next to the video.
-fn generate(model: &Path, ffmpeg: &Path, video: &Path, target: &str) -> Result<PathBuf, Error> {
+pub(crate) fn generate(model: &Path, ffmpeg: &Path, video: &Path, target: &str) -> Result<PathBuf, Error> {
     let progress: std::sync::Arc<dyn Fn(f32) + Send + Sync> = std::sync::Arc::new(|_| {});
     let cancel = std::sync::Arc::new(AtomicBool::new(false));
     let t = speech::transcribe(model, ffmpeg, video, Some(target), cancel, progress)?;
     output::write_subtitle(video, &t.language, "srt", &t.to_srt())
 }
 
-fn sync_note(ffmpeg: &Path, video: &Path, subtitle: &Path) -> String {
-    let speech = match audio::extract_speech(ffmpeg, video, &AtomicBool::new(false), &mut |_| {}) {
-        Ok(s) => s,
-        Err(e) => return format!(", not synced: {e}"),
-    };
-    match sync::sync_file(subtitle, &speech) {
-        Ok(r) if r.applied => format!(
-            ", synced {}, speech {:.0}% -> {:.0}%",
-            r.summary(),
-            r.overlap_before * 100.0,
-            r.overlap_after * 100.0
-        ),
-        Ok(r) => format!(", timing fits ({:.0}% speech)", r.overlap_before * 100.0),
+pub(crate) fn sync_note(ffmpeg: &Path, video: &Path, subtitle: &Path) -> String {
+    match autosync::sync_to_audio(subtitle, video, ffmpeg, &AtomicBool::new(false), &mut |_| {}) {
+        Ok((r, _)) => report_note(&r),
         Err(e) => format!(", not synced: {e}"),
+    }
+}
+
+fn report_note(r: &sync::Report) -> String {
+    if r.applied {
+        format!(", synced {}, speech {:.0}% -> {:.0}%", r.summary(), r.overlap_before * 100.0, r.overlap_after * 100.0)
+    } else {
+        format!(", timing fits ({:.0}% speech)", r.overlap_before * 100.0)
     }
 }
 
@@ -295,6 +349,9 @@ mod tests {
         assert_eq!(d.download_model.as_deref(), Some("base"));
         let g = Args::try_parse_from(["submagician-cli", "--generate", "--model", "tiny", "x"]).unwrap();
         assert!(g.generate && g.model.as_deref() == Some("tiny"));
+        let p = Args::try_parse_from(["submagician-cli", "--player", "--auto", "--", "-odd name.mkv"]).unwrap();
+        assert!(p.player && p.auto && p.paths == vec![PathBuf::from("-odd name.mkv")]);
+        assert!(Args::try_parse_from(["submagician-cli", "--auto", "x"]).is_err(), "--auto needs --player");
     }
 
     #[test]

@@ -1,0 +1,158 @@
+import { Button, LineEdit, TextEdit, ScrollView } from "std-widgets.slint";
+import { Theme, Icons } from "theme.slint";
+import { AppState } from "state.slint";
+import { Glyph } from "components.slint";
+
+// Shown once after an update: the notes of the versions since the last start (changelog/en.md,
+// built into the app). Also from Settings → Updates.
+export component WhatsNewDialog inherits Rectangle {
+    background: #00000080;
+    TouchArea {
+        clicked => { AppState.whats-new-visible = false; }
+    }
+
+    Rectangle {
+        width: min(600px, root.width - 48px);
+        height: min(440px, root.height - 48px);
+        border-radius: 10px;
+        background: Theme.content;
+        border-width: 1px;
+        border-color: Theme.border;
+        TouchArea { }
+
+        VerticalLayout {
+            padding: 22px;
+            spacing: 14px;
+            HorizontalLayout {
+                spacing: 12px;
+                Image {
+                    source: Icons.logo;
+                    width: 36px;
+                    height: 36px;
+                }
+                Text {
+                    text: @tr("What's new in SubMagician {}", AppState.version);
+                    font-size: 20px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                    wrap: word-wrap;
+                    horizontal-stretch: 1;
+                }
+            }
+            ScrollView {
+                vertical-stretch: 1;
+                VerticalLayout {
+                    padding-right: 12px;
+                    Text {
+                        text: AppState.whats-new;
+                        wrap: word-wrap;
+                        font-size: 14px;
+                    }
+                }
+            }
+            HorizontalLayout {
+                alignment: end;
+                Button {
+                    text: @tr("Got it");
+                    primary: true;
+                    clicked => { AppState.whats-new-visible = false; }
+                }
+            }
+        }
+    }
+}
+
+// "Report a problem": shows exactly what would be sent, then opens a GitHub issue or an e-mail.
+// Nothing leaves the computer unless one of those buttons is pressed.
+export component ReportDialog inherits Rectangle {
+    background: #00000080;
+    // Modal: clicks outside do nothing, so a half-written note is not lost.
+    TouchArea { }
+
+    Rectangle {
+        width: min(720px, root.width - 48px);
+        height: min(640px, root.height - 48px);
+        border-radius: 10px;
+        background: Theme.content;
+        border-width: 1px;
+        border-color: Theme.border;
+        TouchArea { }
+
+        VerticalLayout {
+            padding: 22px;
+            spacing: 10px;
+            HorizontalLayout {
+                spacing: 10px;
+                VerticalLayout {
+                    alignment: center;
+                    Glyph { source: Icons.bug; size: 22px; }
+                }
+                Text {
+                    text: @tr("Report a problem");
+                    font-size: 20px;
+                    font-weight: 700;
+                    horizontal-stretch: 1;
+                }
+            }
+            Text {
+                text: @tr("What happened? A sentence or two helps a lot (optional).");
+                font-size: 12px;
+                color: Theme.muted;
+            }
+            LineEdit {
+                text <=> AppState.report-note;
+                placeholder-text: @tr("e.g. Sync to audio froze on a 2-hour film");
+            }
+            Text {
+                text: @tr("This is what will be shared: the version, your system, a few settings and the recent log (file names of your videos may be in it). No passwords or API keys.");
+                font-size: 12px;
+                color: Theme.muted;
+                wrap: word-wrap;
+            }
+            TextEdit {
+                text: AppState.report-text;
+                read-only: true;
+                font-size: 11px;
+                vertical-stretch: 1;
+            }
+            if AppState.report-saved-path != "": Text {
+                text: @tr("Full report saved as {}", AppState.report-saved-path);
+                font-size: 12px;
+                color: Theme.muted;
+                wrap: word-wrap;
+            }
+            Text {
+                text: @tr("Have a GitHub account? Open an issue and drag the saved file into it. No account? Send it by e-mail to {} and attach the saved file.", AppState.support-email);
+                font-size: 12px;
+                wrap: word-wrap;
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: end;
+                Button {
+                    text: @tr("Show file");
+                    icon: Icons.folder;
+                    colorize-icon: true;
+                    clicked => { AppState.report-show-file(); }
+                }
+                Button {
+                    text: @tr("Send by e-mail");
+                    icon: Icons.mail;
+                    colorize-icon: true;
+                    clicked => { AppState.report-email(); }
+                }
+                Button {
+                    text: @tr("Open a GitHub issue");
+                    icon: Icons.open;
+                    colorize-icon: true;
+                    primary: true;
+                    clicked => { AppState.report-github(); }
+                }
+                Button {
+                    text: @tr("Close");
+                    clicked => { AppState.report-visible = false; }
+                }
+            }
+        }
+    }
+}

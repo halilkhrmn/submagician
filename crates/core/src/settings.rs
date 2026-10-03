@@ -41,6 +41,14 @@ pub struct Settings {
     pub whisper_model: String,
     /// When no source has a subtitle, write one from the audio (needs the model).
     pub generate_when_missing: bool,
+    /// Look for a new SubMagician release at start.
+    pub check_updates: bool,
+    /// The version that ran last (for "What's new" after an update).
+    pub last_version_seen: String,
+    /// Write every log line to daily files too (problems are always logged).
+    pub detailed_logs: bool,
+    /// Player plugins look for a subtitle by themselves when a video starts.
+    pub player_auto: bool,
 }
 
 impl Default for Settings {
@@ -62,6 +70,10 @@ impl Default for Settings {
             watch: false,
             whisper_model: "base".into(),
             generate_when_missing: false,
+            check_updates: true,
+            last_version_seen: String::new(),
+            detailed_logs: false,
+            player_auto: true,
         }
     }
 }

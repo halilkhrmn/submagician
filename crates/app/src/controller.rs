@@ -1,7 +1,6 @@
 //! Glue between the window and the core: UI callbacks start work on the tokio runtime, and the
 //! work reports back through `upgrade_in_event_loop`.
 
-use std::collections::HashMap;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -11,16 +10,21 @@ use std::time::Duration;
 use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
 use submagician_core::cache::SearchCache;
 use submagician_core::engine::{Engine, Saved};
+use submagician_core::jobs::{self, Done, Job};
 use submagician_core::media::{self, MediaFile};
 use submagician_core::provider::opensubtitles;
 use submagician_core::provider::subdl;
 use submagician_core::provider::{Candidate, SearchQuery};
 use submagician_core::settings::Settings;
-use submagician_core::sync::{self, Report, Span};
+use submagician_core::sync::{self, Report};
 use submagician_core::{Error, audio, integration, name, output, probe, score, speech, tools, watch};
 use tokio::runtime::Handle;
 
-use crate::{AppWindow, CandidateRow, FileRow};
+use crate::{AppState, AppWindow, CandidateRow, FileRow};
+
+mod plugins;
+mod support;
+mod updates;
 
 // File states, as in Texts.file-state.
 const WAITING: i32 = 0;
@@ -48,7 +52,6 @@ const ST_ERROR: i32 = 6;
 const ST_STOPPED: i32 = 7;
 const ST_QUOTA: i32 = 8;
 const ST_SAVED_ONE: i32 = 9;
-const ST_SETTINGS_SAVED: i32 = 10;
 const ST_SEARCH_FINISHED: i32 = 11;
 const ST_AUDIO: i32 = 12;
 const ST_SYNCED: i32 = 13;
@@ -69,6 +72,18 @@ const ST_GENERATED: i32 = 27;
 const ST_NO_MODEL: i32 = 28;
 const ST_FFMPEG_DOWNLOAD: i32 = 29;
 const ST_FFMPEG_READY: i32 = 30;
+const ST_PLUGIN_INSTALLED: i32 = 31;
+const ST_PLUGIN_REMOVED: i32 = 32;
+const ST_UPDATE_DOWNLOAD: i32 = 33;
+const ST_UP_TO_DATE: i32 = 34;
+const ST_REPORT_SAVED: i32 = 35;
+const ST_FROM_VIDEO: i32 = 36;
+const ST_FROM_VIDEO_DONE: i32 = 37;
+const ST_FROM_VIDEO_FITS: i32 = 38;
+const ST_NO_FFMPEG_TRACK: i32 = 39;
+
+/// Typed settings are saved once the typing pauses for this long.
+const SAVE_DELAY: Duration = Duration::from_millis(700);
 
 /// A new video in a watched folder is handled once its size has not changed for this long.
 const WATCH_SETTLE: Duration = Duration::from_secs(10);
@@ -98,6 +113,8 @@ struct Item {
     probed: bool,
     /// What to search for instead of what the file name says ("Search as").
     search_as: Option<String>,
+    /// 0.0..=1.0 while a long job runs on this video, else negative.
+    progress: f32,
 }
 
 impl Item {
@@ -112,6 +129,7 @@ impl Item {
             subtitle: None,
             probed: false,
             search_as: None,
+            progress: -1.0,
         }
     }
 }
@@ -124,8 +142,6 @@ struct Shared {
     /// Bumped whenever the file list is replaced, so late results of old work are dropped.
     generation: AtomicU64,
     cancel: Arc<AtomicBool>,
-    /// Speech spans per video, so syncing again does not decode the audio again.
-    speech: Mutex<HashMap<PathBuf, Arc<Vec<Span>>>>,
     /// Video to select once the folder scan that is running now has finished.
     select_after_scan: Mutex<Option<PathBuf>>,
     /// When videos were opened one by one (not a folder): the list to show instead of a scan.
@@ -133,6 +149,8 @@ struct Shared {
     /// The folder watch, while it is on.
     watcher: Mutex<Option<watch::WatchHandle>>,
     watch_tx: tokio::sync::mpsc::UnboundedSender<(u64, PathBuf)>,
+    /// A newer release found by the update check.
+    release: Mutex<Option<submagician_core::update::Release>>,
 }
 
 /// What to sync a subtitle to.
@@ -169,10 +187,10 @@ impl Controller {
     pub fn start(ui: &AppWindow, settings: Settings, rt: Handle, initial: Option<PathBuf>) -> Controller {
         let last_folder = settings.last_folder.clone();
         apply_settings(ui, &settings);
-        ui.set_ffmpeg_found(ffmpeg_text(&settings).into());
-        ui.set_version(env!("CARGO_PKG_VERSION").into());
-        ui.set_has_builtin_key(opensubtitles::BUILT_IN_KEY.is_some());
-        ui.set_has_subdl_key(subdl::BUILT_IN_KEY.is_some());
+        ui.global::<AppState>().set_ffmpeg_found(ffmpeg_text(&settings).into());
+        ui.global::<AppState>().set_version(submagician_core::VERSION.into());
+        ui.global::<AppState>().set_has_builtin_key(opensubtitles::BUILT_IN_KEY.is_some());
+        ui.global::<AppState>().set_has_subdl_key(subdl::BUILT_IN_KEY.is_some());
 
         let (watch_tx, watch_rx) = tokio::sync::mpsc::unbounded_channel();
         let c = Controller {
@@ -183,30 +201,30 @@ impl Controller {
                 items: Mutex::new(Vec::new()),
                 generation: AtomicU64::new(0),
                 cancel: Arc::new(AtomicBool::new(false)),
-                speech: Mutex::new(HashMap::new()),
                 select_after_scan: Mutex::new(None),
                 opened_files: Mutex::new(None),
                 watcher: Mutex::new(None),
                 watch_tx,
+                release: Mutex::new(None),
             }),
             ui: ui.as_weak(),
             rt,
         };
 
-        ui.on_choose_folder({
+        ui.global::<AppState>().on_choose_folder({
             let c = c.clone();
             move || c.choose_folder()
         });
-        ui.on_choose_videos({
+        ui.global::<AppState>().on_choose_videos({
             let c = c.clone();
             move || c.choose_videos()
         });
-        ui.on_download_ffmpeg({
+        ui.global::<AppState>().on_download_ffmpeg({
             let c = c.clone();
             move || c.download_ffmpeg()
         });
-        ui.set_can_download_ffmpeg(cfg!(windows));
-        ui.on_rescan({
+        ui.global::<AppState>().set_can_download_ffmpeg(cfg!(windows));
+        ui.global::<AppState>().on_rescan({
             let c = c.clone();
             move || {
                 let files = c.shared.opened_files.lock().unwrap().clone();
@@ -217,23 +235,23 @@ impl Controller {
                 }
             }
         });
-        ui.on_search_all({
+        ui.global::<AppState>().on_search_all({
             let c = c.clone();
             move || c.run_batch(false)
         });
-        ui.on_download_all({
+        ui.global::<AppState>().on_download_all({
             let c = c.clone();
             move || c.run_batch(true)
         });
-        ui.on_stop({
+        ui.global::<AppState>().on_stop({
             let c = c.clone();
             move || c.shared.cancel.store(true, Ordering::SeqCst)
         });
-        ui.on_file_selected({
+        ui.global::<AppState>().on_file_selected({
             let c = c.clone();
             move |i| c.file_selected(i as usize, false)
         });
-        ui.on_search_file({
+        ui.global::<AppState>().on_search_file({
             let c = c.clone();
             move |i| {
                 if i >= 0 {
@@ -241,23 +259,23 @@ impl Controller {
                 }
             }
         });
-        ui.on_download_candidate({
+        ui.global::<AppState>().on_download_candidate({
             let c = c.clone();
             move |ci| c.download_candidate(ci)
         });
-        ui.on_sync_audio({
+        ui.global::<AppState>().on_sync_audio({
             let c = c.clone();
             move |i| c.start_sync(i, false)
         });
-        ui.on_sync_reference({
+        ui.global::<AppState>().on_sync_reference({
             let c = c.clone();
             move |i| c.start_sync(i, true)
         });
-        ui.on_shift({
+        ui.global::<AppState>().on_shift({
             let c = c.clone();
             move |i, ms| c.shift(i, ms)
         });
-        ui.on_clear_cache({
+        ui.global::<AppState>().on_clear_cache({
             let c = c.clone();
             move || {
                 let cleared = Settings::search_cache_dir().map(|d| SearchCache::new(d).clear());
@@ -267,18 +285,26 @@ impl Controller {
                 }
             }
         });
-        ui.on_save_settings({
+        ui.global::<AppState>().on_settings_changed({
             let c = c.clone();
             move || c.save_settings()
         });
+        let save_timer = std::rc::Rc::new(slint::Timer::default());
+        ui.global::<AppState>().on_settings_edited({
+            let c = c.clone();
+            move || {
+                let c = c.clone();
+                save_timer.start(slint::TimerMode::SingleShot, SAVE_DELAY, move || c.save_settings());
+            }
+        });
 
-        ui.set_menu_installed(integration::is_installed());
-        ui.on_set_menu({
+        ui.global::<AppState>().set_menu_installed(integration::is_installed());
+        ui.global::<AppState>().on_set_menu({
             let c = c.clone();
             move |add| c.set_menu(add)
         });
         rt_spawn_watch_worker(&c, watch_rx);
-        ui.on_toggle_watch({
+        ui.global::<AppState>().on_toggle_watch({
             let c = c.clone();
             move |on| {
                 {
@@ -291,7 +317,7 @@ impl Controller {
                 c.update_watch();
             }
         });
-        ui.on_generate({
+        ui.global::<AppState>().on_generate({
             let c = c.clone();
             move |i| {
                 let Ok(index) = usize::try_from(i) else { return };
@@ -302,11 +328,11 @@ impl Controller {
                 });
             }
         });
-        ui.on_download_model({
+        ui.global::<AppState>().on_download_model({
             let c = c.clone();
             move || c.download_model()
         });
-        ui.on_whisper_model_changed({
+        ui.global::<AppState>().on_whisper_model_changed({
             let c = c.clone();
             move |index| {
                 let Some(model) = usize::try_from(index).ok().and_then(|i| speech::MODELS.get(i)) else { return };
@@ -318,11 +344,11 @@ impl Controller {
                     }
                 }
                 if let Some(ui) = c.ui.upgrade() {
-                    ui.set_whisper_installed(model.installed().is_some());
+                    ui.global::<AppState>().set_whisper_installed(model.installed().is_some());
                 }
             }
         });
-        ui.on_search_as({
+        ui.global::<AppState>().on_search_as({
             let c = c.clone();
             move |i, text| {
                 let Ok(index) = usize::try_from(i) else { return };
@@ -333,18 +359,31 @@ impl Controller {
                 c.file_selected(index, true);
             }
         });
-        ui.on_restore({
+        ui.global::<AppState>().on_use_embedded({
+            let c = c.clone();
+            move |i| c.use_embedded(i)
+        });
+        ui.global::<AppState>().on_restore({
             let c = c.clone();
             move |i| c.restore(i)
         });
-        ui.on_play({
+        ui.global::<AppState>().on_play({
             let c = c.clone();
             move |i| c.with_video(i, |p| opener::open(p).map_err(|e| e.to_string()))
         });
-        ui.on_reveal({
+        ui.global::<AppState>().on_reveal({
             let c = c.clone();
             move |i| c.with_video(i, |p| opener::reveal(p).map_err(|e| e.to_string()))
         });
+
+        let state = ui.global::<AppState>();
+        c.wire_updates(&state);
+        c.wire_support(&state);
+        c.wire_plugins(&state);
+        c.show_whats_new_once(&state);
+        if c.shared.settings.lock().unwrap().check_updates {
+            c.check_for_update(false);
+        }
 
         match initial {
             Some(path) => c.open_path(path),
@@ -392,7 +431,7 @@ impl Controller {
                 Err(e) => c.status(ST_ERROR, 0, 0, e.to_string()),
             }
             let found = ffmpeg_text(&c.shared.settings.lock().unwrap());
-            let _ = c.ui.upgrade_in_event_loop(move |ui| ui.set_ffmpeg_found(found.into()));
+            let _ = c.ui.upgrade_in_event_loop(move |ui| ui.global::<AppState>().set_ffmpeg_found(found.into()));
         });
     }
 
@@ -411,7 +450,7 @@ impl Controller {
             Err(e) => self.status(ST_ERROR, 0, 0, e.to_string()),
         }
         if let Some(ui) = self.ui.upgrade() {
-            ui.set_menu_installed(integration::is_installed());
+            ui.global::<AppState>().set_menu_installed(integration::is_installed());
         }
     }
 
@@ -462,19 +501,19 @@ impl Controller {
     /// Runs `work` with the window marked busy. Call from the UI thread.
     fn run_busy(&self, work: impl Future<Output = ()> + Send + 'static) {
         let Some(ui) = self.ui.upgrade() else { return };
-        if ui.get_busy() {
+        if ui.global::<AppState>().get_busy() {
             return;
         }
-        ui.set_busy(true);
-        ui.set_progress(0.0);
+        ui.global::<AppState>().set_busy(true);
+        ui.global::<AppState>().set_progress(0.0);
         self.shared.cancel.store(false, Ordering::SeqCst);
         let weak = self.ui.clone();
         self.rt.spawn(async move {
             work.await;
             let _ = weak.upgrade_in_event_loop(|ui| {
-                ui.set_busy(false);
-                ui.set_candidates_loading(false);
-                ui.set_progress(0.0);
+                ui.global::<AppState>().set_busy(false);
+                ui.global::<AppState>().set_candidates_loading(false);
+                ui.global::<AppState>().set_progress(0.0);
             });
         });
     }
@@ -485,15 +524,15 @@ impl Controller {
             log::warn!("status {kind}: {detail}");
         }
         let _ = self.ui.upgrade_in_event_loop(move |ui| {
-            ui.set_status_kind(kind);
-            ui.set_status_a(a);
-            ui.set_status_b(b);
-            ui.set_status_detail(detail.into());
+            ui.global::<AppState>().set_status_kind(kind);
+            ui.global::<AppState>().set_status_a(a);
+            ui.global::<AppState>().set_status_b(b);
+            ui.global::<AppState>().set_status_detail(detail.into());
         });
     }
 
     fn progress(&self, value: f32) {
-        let _ = self.ui.upgrade_in_event_loop(move |ui| ui.set_progress(value));
+        let _ = self.ui.upgrade_in_event_loop(move |ui| ui.global::<AppState>().set_progress(value));
     }
 
     /// A file dialog owned by the window, so it opens in front of it (an ownerless dialog on
@@ -525,7 +564,7 @@ impl Controller {
 
     /// Shows the videos of `folder`, or only `files` when given.
     fn open(&self, folder: PathBuf, files: Option<Vec<PathBuf>>) {
-        if self.ui.upgrade().is_some_and(|ui| ui.get_busy()) {
+        if self.ui.upgrade().is_some_and(|ui| ui.global::<AppState>().get_busy()) {
             return;
         }
         log::info!(
@@ -549,11 +588,17 @@ impl Controller {
                 Some([one]) => one.display().to_string(),
                 _ => folder.display().to_string(),
             };
-            ui.set_folder(shown.into());
-            ui.set_files(ModelRc::default());
-            ui.set_candidates(ModelRc::default());
-            ui.set_selected_file(-1);
-            ui.set_selected_candidate(-1);
+            let name = match files.as_deref() {
+                Some([one]) => one.file_name(),
+                _ => folder.file_name(),
+            };
+            let name = name.map_or_else(|| shown.clone(), |n| n.to_string_lossy().into_owned());
+            ui.global::<AppState>().set_folder(shown.into());
+            ui.global::<AppState>().set_folder_name(name.into());
+            ui.global::<AppState>().set_files(ModelRc::default());
+            ui.global::<AppState>().set_candidates(ModelRc::default());
+            ui.global::<AppState>().set_selected_file(-1);
+            ui.global::<AppState>().set_selected_candidate(-1);
         }
         self.status(ST_SCANNING, 0, 0, "");
         let c = self.clone();
@@ -578,9 +623,9 @@ impl Controller {
             let select = c.shared.select_after_scan.lock().unwrap().take();
             let selected = select.and_then(|p| c.shared.items.lock().unwrap().iter().position(|it| it.media.path == p));
             let _ = c.ui.upgrade_in_event_loop(move |ui| {
-                ui.set_files(ModelRc::new(VecModel::from(rows)));
+                ui.global::<AppState>().set_files(ModelRc::new(VecModel::from(rows)));
                 if let Some(i) = selected {
-                    ui.set_selected_file(i as i32);
+                    ui.global::<AppState>().set_selected_file(i as i32);
                 }
             });
             c.status(ST_SCANNED, count, 0, "");
@@ -648,13 +693,13 @@ impl Controller {
         };
         let epoch = self.generation();
         self.show_candidates(epoch, index);
-        let busy = self.ui.upgrade().is_some_and(|ui| ui.get_busy());
+        let busy = self.ui.upgrade().is_some_and(|ui| ui.global::<AppState>().get_busy());
         if (searched && !force) || busy {
             return;
         }
         if let Some(ui) = self.ui.upgrade() {
-            ui.set_candidates_loading(true);
-            ui.set_candidates(ModelRc::default());
+            ui.global::<AppState>().set_candidates_loading(true);
+            ui.global::<AppState>().set_candidates(ModelRc::default());
         }
         let c = self.clone();
         self.run_busy(async move {
@@ -666,7 +711,9 @@ impl Controller {
 
     fn download_candidate(&self, candidate: i32) {
         let Some(ui) = self.ui.upgrade() else { return };
-        let (Ok(index), Ok(candidate)) = (usize::try_from(ui.get_selected_file()), usize::try_from(candidate)) else {
+        let (Ok(index), Ok(candidate)) =
+            (usize::try_from(ui.global::<AppState>().get_selected_file()), usize::try_from(candidate))
+        else {
             return;
         };
         let epoch = self.generation();
@@ -813,25 +860,11 @@ impl Controller {
         let target = self.languages().swap_remove(0);
         self.set_state(epoch, index, GENERATING, "");
         self.status(ST_LISTENING, 0, 0, "");
-        let progress: Arc<dyn Fn(f32) + Send + Sync> = {
-            let c = self.clone();
-            let last = Arc::new(std::sync::atomic::AtomicI32::new(-1));
-            Arc::new(move |p: f32| {
-                let pct = (p * 100.0) as i32;
-                if last.swap(pct, Ordering::Relaxed) != pct {
-                    c.status(ST_LISTENING, pct, 0, "");
-                    c.progress(p);
-                }
-            })
-        };
-        let cancel = self.shared.cancel_flag();
-        let path = video.clone();
-        let result = tokio::task::spawn_blocking(move || {
-            let transcript = speech::transcribe(&model, &ffmpeg, &path, Some(&target), cancel, progress)?;
-            output::write_subtitle(&path, &transcript.language, "srt", &transcript.to_srt())
-        })
-        .await
-        .map_err(|e| Error::Parse(e.to_string()))?;
+        let job = Job::Generate { video: video.clone(), ffmpeg, model, language: target };
+        let result = self.run_job(epoch, index, job, ST_LISTENING).await.and_then(|done| match done {
+            Done::Written { path, .. } => Ok(path),
+            other => Err(Error::Other(format!("unexpected result {other:?}"))),
+        });
         match result {
             Ok(saved) => {
                 {
@@ -879,7 +912,7 @@ impl Controller {
                 Err(e) => c.status(ST_ERROR, 0, 0, e.to_string()),
             }
             let installed = model.installed().is_some();
-            let _ = c.ui.upgrade_in_event_loop(move |ui| ui.set_whisper_installed(installed));
+            let _ = c.ui.upgrade_in_event_loop(move |ui| ui.global::<AppState>().set_whisper_installed(installed));
         });
     }
 
@@ -945,13 +978,13 @@ impl Controller {
             if shared.generation.load(Ordering::SeqCst) != epoch {
                 return;
             }
-            let files = ui.get_files();
+            let files = ui.global::<AppState>().get_files();
             match files.as_any().downcast_ref::<VecModel<FileRow>>() {
                 Some(model) => model.push(row),
                 None => {
                     let mut rows: Vec<FileRow> = files.iter().collect();
                     rows.push(row);
-                    ui.set_files(ModelRc::new(VecModel::from(rows)));
+                    ui.global::<AppState>().set_files(ModelRc::new(VecModel::from(rows)));
                 }
             }
         });
@@ -1118,21 +1151,32 @@ impl Controller {
         let what = if matches!(reference, Reference::Audio) { "audio" } else { "subtitle" };
         log::info!("sync {} to {what}", target.display());
         self.set_state(epoch, index, SYNCING, "");
-        let result = async {
-            let spans = match reference {
-                Reference::Audio => self.speech(&video).await?,
-                Reference::Subtitle(path) => Arc::new(
-                    tokio::task::spawn_blocking(move || sync::reference_from_file(&path))
-                        .await
-                        .map_err(|e| Error::Parse(e.to_string()))??,
-                ),
-            };
-            let path = target.clone();
-            tokio::task::spawn_blocking(move || sync::sync_file(&path, &spans))
+        let result = match reference {
+            Reference::Audio => match self.ffmpeg() {
+                None => Err(Error::NoFfmpeg),
+                Some(ffmpeg) => {
+                    self.status(ST_AUDIO, 0, 0, "");
+                    let job = Job::SyncAudio { subtitle: target.clone(), video: video.clone(), ffmpeg };
+                    match self.run_job(epoch, index, job, ST_AUDIO).await {
+                        Ok(Done::Synced { report, method }) => {
+                            log::info!("synced by {method:?}");
+                            Ok(report)
+                        }
+                        Ok(other) => Err(Error::Other(format!("unexpected result {other:?}"))),
+                        Err(e) => Err(e),
+                    }
+                }
+            },
+            Reference::Subtitle(path) => {
+                let target = target.clone();
+                tokio::task::spawn_blocking(move || {
+                    let spans = sync::reference_from_file(&path)?;
+                    sync::sync_file(&target, &spans)
+                })
                 .await
                 .map_err(|e| Error::Parse(e.to_string()))?
-        }
-        .await;
+            }
+        };
         let pct = |v: f32| (v * 100.0).round() as i32;
         log::info!("sync result: {result:?}");
         match &result {
@@ -1161,29 +1205,101 @@ impl Controller {
         result
     }
 
-    /// Speech spans of `video`, from the cache or decoded with ffmpeg.
-    async fn speech(&self, video: &Path) -> Result<Arc<Vec<Span>>, Error> {
-        if let Some(spans) = self.shared.speech.lock().unwrap().get(video) {
-            return Ok(spans.clone());
-        }
-        let ffmpeg = self.ffmpeg().ok_or(Error::NoFfmpeg)?;
-        let (c, path) = (self.clone(), video.to_path_buf());
-        self.status(ST_AUDIO, 0, 0, "");
-        let spans = tokio::task::spawn_blocking(move || {
-            let mut last = -1;
-            audio::extract_speech(&ffmpeg, &path, &c.shared.cancel, &mut |p| {
+    /// Runs a heavy job for video `index` in the worker process (in this process when the
+    /// command-line tool is missing), showing its progress on the video and in the status bar
+    /// as status `kind`. Stop ends it.
+    async fn run_job(&self, epoch: u64, index: usize, job: Job, kind: i32) -> Result<Done, Error> {
+        let progress: jobs::Progress = {
+            let c = self.clone();
+            let last = Arc::new(std::sync::atomic::AtomicI32::new(-1));
+            Arc::new(move |p: f32| {
                 let pct = (p * 100.0) as i32;
-                if pct != last {
-                    last = pct;
-                    c.status(ST_AUDIO, pct, 0, "");
+                if last.swap(pct, Ordering::Relaxed) != pct {
+                    c.status(kind, pct, 0, "");
+                    c.progress(p);
+                    c.set_progress(epoch, index, p);
                 }
             })
-        })
-        .await
-        .map_err(|e| Error::Parse(e.to_string()))??;
-        let spans = Arc::new(spans);
-        self.shared.speech.lock().unwrap().insert(video.to_path_buf(), spans.clone());
-        Ok(spans)
+        };
+        self.set_progress(epoch, index, 0.0);
+        let cancel = self.shared.cancel_flag();
+        let result = tokio::task::spawn_blocking(move || jobs::run_isolated(&job, cancel, progress))
+            .await
+            .map_err(|e| Error::Parse(e.to_string()))?;
+        self.set_progress(epoch, index, -1.0);
+        result
+    }
+
+    fn set_progress(&self, epoch: u64, index: usize, value: f32) {
+        {
+            let mut items = self.shared.items.lock().unwrap();
+            if self.generation() != epoch {
+                return;
+            }
+            let Some(it) = items.get_mut(index) else { return };
+            it.progress = value;
+        }
+        self.push_row(epoch, index);
+    }
+
+    /// Takes the subtitle in a wanted language out of video `index`, saves it next to the
+    /// video and syncs it to the audio.
+    fn use_embedded(&self, index: i32) {
+        let Ok(index) = usize::try_from(index) else { return };
+        let epoch = self.generation();
+        let c = self.clone();
+        self.run_busy(async move {
+            let configured = PathBuf::from(&c.shared.settings.lock().unwrap().ffmpeg_path);
+            let (Some(ffmpeg), Some(ffprobe)) =
+                (audio::find_ffmpeg(Some(&configured)), audio::find_ffprobe(Some(&configured)))
+            else {
+                c.status(ST_NO_FFMPEG_TRACK, 0, 0, "");
+                return;
+            };
+            let Some(video) = c.shared.items.lock().unwrap().get(index).map(|it| it.media.path.clone()) else { return };
+            c.set_state(epoch, index, SYNCING, "");
+            c.status(ST_FROM_VIDEO, 0, 0, "");
+            let job = Job::Embedded { video: video.clone(), ffmpeg, ffprobe, languages: c.languages() };
+            match c.run_job(epoch, index, job, ST_FROM_VIDEO).await {
+                Ok(Done::Extracted { path, report, sync_error, .. }) => {
+                    log::info!("took {} out of the video: {report:?} {sync_error:?}", path.display());
+                    {
+                        let mut items = c.shared.items.lock().unwrap();
+                        if c.generation() == epoch
+                            && let Some(it) = items.get_mut(index)
+                        {
+                            it.media.existing = media::existing_subtitles(&video);
+                            it.subtitle = Some(path.clone());
+                        }
+                    }
+                    let pct = |v: f32| (v * 100.0).round() as i32;
+                    match (report, sync_error) {
+                        (Some(r), _) if r.applied => {
+                            c.set_state(epoch, index, SYNCED, r.summary());
+                            c.status(ST_FROM_VIDEO_DONE, pct(r.overlap_before), pct(r.overlap_after), file_name(&path));
+                        }
+                        (Some(r), _) => {
+                            c.set_state(epoch, index, TIMING_OK, "");
+                            c.status(ST_FROM_VIDEO_FITS, pct(r.overlap_before), 0, file_name(&path));
+                        }
+                        (None, e) => {
+                            let e = e.unwrap_or_default();
+                            c.set_state(epoch, index, SYNC_FAILED, e.clone());
+                            c.status(ST_ERROR, 0, 0, e);
+                        }
+                    }
+                }
+                Ok(other) => c.status(ST_ERROR, 0, 0, format!("unexpected result {other:?}")),
+                Err(Error::Cancelled) => {
+                    c.set_state(epoch, index, WAITING, "");
+                    c.status(ST_STOPPED, 0, 0, "");
+                }
+                Err(e) => {
+                    c.set_state(epoch, index, FAILED, e.to_string());
+                    c.status(ST_ERROR, 0, 0, e.to_string());
+                }
+            }
+        });
     }
 
     fn set_state(&self, epoch: u64, index: usize, state: i32, detail: impl Into<String>) {
@@ -1213,7 +1329,7 @@ impl Controller {
         };
         let shared = self.shared.clone();
         let _ = self.ui.upgrade_in_event_loop(move |ui| {
-            let files = ui.get_files();
+            let files = ui.global::<AppState>().get_files();
             if shared.generation.load(Ordering::SeqCst) == epoch && index < files.row_count() {
                 files.set_row_data(index, row);
             }
@@ -1230,10 +1346,12 @@ impl Controller {
         };
         let shared = self.shared.clone();
         let _ = self.ui.upgrade_in_event_loop(move |ui| {
-            if shared.generation.load(Ordering::SeqCst) == epoch && ui.get_selected_file() == index as i32 {
-                ui.set_candidates(ModelRc::new(VecModel::from(rows)));
-                ui.set_selected_candidate(-1);
-                ui.set_candidates_loading(false);
+            if shared.generation.load(Ordering::SeqCst) == epoch
+                && ui.global::<AppState>().get_selected_file() == index as i32
+            {
+                ui.global::<AppState>().set_candidates(ModelRc::new(VecModel::from(rows)));
+                ui.global::<AppState>().set_selected_candidate(-1);
+                ui.global::<AppState>().set_candidates_loading(false);
             }
         });
     }
@@ -1248,21 +1366,23 @@ impl Controller {
                 log::warn!("settings not saved: {e}");
             }
             let codes = s.language_codes();
+            if let Some(book) = submagician_core::applog::global() {
+                book.set_daily(s.detailed_logs);
+            }
             (build_engine(&s), before != codes, codes.join(", "))
         };
         *self.shared.engine.lock().unwrap() = engine;
-        ui.set_ffmpeg_found(ffmpeg_text(&self.shared.settings.lock().unwrap()).into());
-        ui.set_languages(normalized.into());
+        ui.global::<AppState>().set_ffmpeg_found(ffmpeg_text(&self.shared.settings.lock().unwrap()).into());
         if languages_changed {
+            log::info!("languages: {normalized}");
             // Old results were for other languages.
             let mut items = self.shared.items.lock().unwrap();
             for it in items.iter_mut() {
                 it.searched = false;
                 it.candidates.clear();
             }
-            ui.set_candidates(ModelRc::default());
+            ui.global::<AppState>().set_candidates(ModelRc::default());
         }
-        self.status(ST_SETTINGS_SAVED, 0, 0, "");
     }
 }
 
@@ -1272,42 +1392,46 @@ fn rt_spawn_watch_worker(c: &Controller, rx: tokio::sync::mpsc::UnboundedReceive
 }
 
 fn apply_settings(ui: &AppWindow, s: &Settings) {
-    ui.set_watch(s.watch);
+    ui.global::<AppState>().set_watch(s.watch);
     let models: Vec<slint::SharedString> =
         speech::MODELS.iter().map(|m| format!("{} ({} MB)", m.id, m.size_mb).into()).collect();
-    ui.set_whisper_models(ModelRc::new(VecModel::from(models)));
+    ui.global::<AppState>().set_whisper_models(ModelRc::new(VecModel::from(models)));
     let current = speech::MODELS.iter().position(|m| m.id == s.whisper_model).unwrap_or(1);
-    ui.set_whisper_model_index(current as i32);
-    ui.set_whisper_installed(speech::MODELS[current].installed().is_some());
-    ui.set_generate_missing(s.generate_when_missing);
-    ui.set_languages(s.language_codes().join(", ").into());
-    ui.set_recursive(s.recursive);
-    ui.set_skip_existing(s.skip_existing);
-    ui.set_os_username(s.opensubtitles_username.clone().into());
-    ui.set_os_password(s.opensubtitles_password.clone().into());
-    ui.set_os_api_key(s.opensubtitles_api_key.clone().into());
-    ui.set_auto_sync(s.auto_sync);
-    ui.set_ffmpeg_path(s.ffmpeg_path.clone().into());
-    ui.set_use_opensubtitles(s.use_opensubtitles);
-    ui.set_use_subdl(s.use_subdl);
-    ui.set_use_addic7ed(s.use_addic7ed);
-    ui.set_subdl_api_key(s.subdl_api_key.clone().into());
+    ui.global::<AppState>().set_whisper_model_index(current as i32);
+    ui.global::<AppState>().set_whisper_installed(speech::MODELS[current].installed().is_some());
+    ui.global::<AppState>().set_generate_missing(s.generate_when_missing);
+    ui.global::<AppState>().set_languages(s.language_codes().join(", ").into());
+    ui.global::<AppState>().set_recursive(s.recursive);
+    ui.global::<AppState>().set_skip_existing(s.skip_existing);
+    ui.global::<AppState>().set_os_username(s.opensubtitles_username.clone().into());
+    ui.global::<AppState>().set_os_password(s.opensubtitles_password.clone().into());
+    ui.global::<AppState>().set_os_api_key(s.opensubtitles_api_key.clone().into());
+    ui.global::<AppState>().set_auto_sync(s.auto_sync);
+    ui.global::<AppState>().set_ffmpeg_path(s.ffmpeg_path.clone().into());
+    ui.global::<AppState>().set_use_opensubtitles(s.use_opensubtitles);
+    ui.global::<AppState>().set_use_subdl(s.use_subdl);
+    ui.global::<AppState>().set_use_addic7ed(s.use_addic7ed);
+    ui.global::<AppState>().set_subdl_api_key(s.subdl_api_key.clone().into());
+    ui.global::<AppState>().set_check_updates(s.check_updates);
+    ui.global::<AppState>().set_detailed_logs(s.detailed_logs);
 }
 
 fn read_settings(ui: &AppWindow, s: &mut Settings) {
-    s.languages = ui.get_languages().into();
-    s.recursive = ui.get_recursive();
-    s.skip_existing = ui.get_skip_existing();
-    s.opensubtitles_username = ui.get_os_username().trim().into();
-    s.opensubtitles_password = ui.get_os_password().into();
-    s.opensubtitles_api_key = ui.get_os_api_key().trim().into();
-    s.auto_sync = ui.get_auto_sync();
-    s.ffmpeg_path = ui.get_ffmpeg_path().trim().into();
-    s.use_opensubtitles = ui.get_use_opensubtitles();
-    s.use_subdl = ui.get_use_subdl();
-    s.use_addic7ed = ui.get_use_addic7ed();
-    s.subdl_api_key = ui.get_subdl_api_key().trim().into();
-    s.generate_when_missing = ui.get_generate_missing();
+    s.languages = ui.global::<AppState>().get_languages().into();
+    s.recursive = ui.global::<AppState>().get_recursive();
+    s.skip_existing = ui.global::<AppState>().get_skip_existing();
+    s.opensubtitles_username = ui.global::<AppState>().get_os_username().trim().into();
+    s.opensubtitles_password = ui.global::<AppState>().get_os_password().into();
+    s.opensubtitles_api_key = ui.global::<AppState>().get_os_api_key().trim().into();
+    s.auto_sync = ui.global::<AppState>().get_auto_sync();
+    s.ffmpeg_path = ui.global::<AppState>().get_ffmpeg_path().trim().into();
+    s.use_opensubtitles = ui.global::<AppState>().get_use_opensubtitles();
+    s.use_subdl = ui.global::<AppState>().get_use_subdl();
+    s.use_addic7ed = ui.global::<AppState>().get_use_addic7ed();
+    s.subdl_api_key = ui.global::<AppState>().get_subdl_api_key().trim().into();
+    s.generate_when_missing = ui.global::<AppState>().get_generate_missing();
+    s.check_updates = ui.global::<AppState>().get_check_updates();
+    s.detailed_logs = ui.global::<AppState>().get_detailed_logs();
 }
 
 /// Where ffmpeg was found, or "" when it was not.
@@ -1333,6 +1457,7 @@ fn file_row(root: &Path, it: &Item, first_language: &str) -> FileRow {
         has_wanted: it.media.has_language(first_language),
         state: it.state,
         detail: it.detail.clone().into(),
+        progress: it.progress,
     }
 }
 

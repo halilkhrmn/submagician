@@ -1,0 +1,434 @@
+import { Palette } from "std-widgets.slint";
+import { Theme, Icons } from "theme.slint";
+import { FileRow, CandidateRow, Texts } from "state.slint";
+
+// A monochrome icon tinted like text.
+export component Glyph inherits Image {
+    in property <brush> color: Palette.foreground;
+    in property <length> size: 16px;
+    width: size;
+    height: size;
+    colorize: color;
+    image-fit: contain;
+}
+
+export component NavItem inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    in property <bool> selected;
+    // A dot after the label, e.g. an update is available.
+    in property <bool> badge;
+    callback clicked;
+
+    height: 40px;
+    border-radius: 6px;
+    accessible-role: button;
+    accessible-label: label;
+    accessible-action-default => { root.clicked(); }
+    background: selected ? Theme.card : touch.has-hover ? Theme.card-hover : transparent;
+    animate background { duration: 120ms; }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+
+    // Accent pill on the selected item, like Windows 11 navigation views.
+    Rectangle {
+        x: 0;
+        width: 3px;
+        height: selected ? 16px : 0px;
+        y: (parent.height - self.height) / 2;
+        border-radius: 1.5px;
+        background: Palette.accent-background;
+        animate height { duration: 150ms; easing: ease-out; }
+    }
+
+    HorizontalLayout {
+        padding-left: 14px;
+        spacing: 12px;
+        VerticalLayout {
+            alignment: center;
+            Glyph { source: icon; size: 18px; }
+        }
+        Text {
+            text: label;
+            vertical-alignment: center;
+            font-size: 14px;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+        if badge: VerticalLayout {
+            alignment: center;
+            padding-right: 12px;
+            Rectangle {
+                width: 8px;
+                height: 8px;
+                border-radius: 4px;
+                background: Palette.accent-background;
+            }
+        }
+    }
+}
+
+// A rounded panel with an optional title row.
+export component Card inherits Rectangle {
+    in property <string> title;
+    in property <image> icon;
+    in property <bool> has-icon: false;
+    in property <length> inner-padding: 16px;
+    in property <length> inner-spacing: 12px;
+    border-radius: Theme.radius;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: Theme.card;
+
+    VerticalLayout {
+        padding: root.inner-padding;
+        spacing: root.inner-spacing;
+        if root.title != "": HorizontalLayout {
+            spacing: 8px;
+            if root.has-icon: VerticalLayout {
+                alignment: center;
+                Glyph { source: root.icon; size: 18px; color: Palette.accent-background; }
+            }
+            Text {
+                text: root.title;
+                font-size: 15px;
+                font-weight: 600;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+        }
+        @children
+    }
+}
+
+// One setting: a title, an optional explanation, and the control on the right.
+export component SettingRow inherits HorizontalLayout {
+    in property <string> title;
+    in property <string> description;
+    spacing: 16px;
+    VerticalLayout {
+        horizontal-stretch: 1;
+        alignment: center;
+        spacing: 2px;
+        Text { text: root.title; wrap: word-wrap; }
+        if root.description != "": Text {
+            text: root.description;
+            font-size: 12px;
+            color: Theme.muted;
+            wrap: word-wrap;
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        horizontal-stretch: 0;
+        HorizontalLayout {
+            spacing: 8px;
+            @children
+        }
+    }
+}
+
+export component Badge inherits Rectangle {
+    in property <string> text;
+    in property <color> tone: Theme.idle;
+    border-radius: 4px;
+    background: tone.transparentize(0.85);
+    height: 20px;
+    HorizontalLayout {
+        padding-left: 7px;
+        padding-right: 7px;
+        Text {
+            text: root.text;
+            font-size: 11px;
+            font-weight: 600;
+            vertical-alignment: center;
+            color: root.tone;
+        }
+    }
+}
+
+// A highlighted hint with an icon.
+export component Note inherits Rectangle {
+    in property <string> text;
+    in property <image> icon: Icons.info;
+    in property <color> tone: Palette.accent-background;
+    border-radius: 6px;
+    background: tone.transparentize(0.88);
+    HorizontalLayout {
+        padding: 10px;
+        spacing: 10px;
+        VerticalLayout {
+            alignment: start;
+            Glyph { source: root.icon; color: root.tone; }
+        }
+        Text {
+            text: root.text;
+            wrap: word-wrap;
+            font-size: 12px;
+            horizontal-stretch: 1;
+        }
+    }
+}
+
+export component EmptyState inherits VerticalLayout {
+    in property <image> icon;
+    in property <string> title;
+    in property <string> subtitle;
+    in property <length> icon-size: 48px;
+    alignment: center;
+    spacing: 10px;
+    vertical-stretch: 1;
+    HorizontalLayout {
+        alignment: center;
+        Glyph { source: root.icon; size: root.icon-size; color: Theme.muted; }
+    }
+    Text {
+        text: root.title;
+        font-size: 18px;
+        font-weight: 600;
+        horizontal-alignment: center;
+        wrap: word-wrap;
+    }
+    if root.subtitle != "": HorizontalLayout {
+        alignment: center;
+        Text {
+            text: root.subtitle;
+            color: Theme.muted;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+            max-width: 460px;
+        }
+    }
+    HorizontalLayout {
+        alignment: center;
+        spacing: 8px;
+        @children
+    }
+}
+
+export component PageHeader inherits HorizontalLayout {
+    in property <string> title;
+    in property <string> subtitle;
+    spacing: 8px;
+    VerticalLayout {
+        spacing: 2px;
+        horizontal-stretch: 1;
+        Text {
+            text: root.title;
+            font-size: 26px;
+            font-weight: 600;
+            overflow: elide;
+        }
+        if root.subtitle != "": Text {
+            text: root.subtitle;
+            color: Theme.muted;
+            overflow: elide;
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        horizontal-stretch: 0;
+        HorizontalLayout {
+            spacing: 8px;
+            @children
+        }
+    }
+}
+
+// A small round icon button with a tooltip-like accessible label.
+export component IconButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    in property <bool> enabled: true;
+    callback clicked;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    accessible-role: button;
+    accessible-label: label;
+    accessible-action-default => { if root.enabled { root.clicked(); } }
+    background: touch.has-hover && root.enabled ? Theme.card-hover : transparent;
+    Glyph {
+        source: root.icon;
+        size: 16px;
+        color: root.enabled ? Palette.foreground : Theme.muted;
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// One video in the library list.
+// A thin bar for a job's progress (0..1).
+export component ProgressBar inherits Rectangle {
+    in property <float> value;
+    height: 4px;
+    border-radius: 2px;
+    background: Theme.border;
+    Rectangle {
+        x: 0;
+        width: parent.width * clamp(root.value, 0, 1);
+        height: parent.height;
+        border-radius: 2px;
+        background: Palette.accent-background;
+        animate width { duration: 200ms; }
+    }
+}
+
+export component FileCard inherits Rectangle {
+    in property <FileRow> item;
+    in property <bool> selected;
+    callback clicked();
+
+    property <int> tone: Texts.file-tone(item.state);
+    property <color> tone-color: Theme.tone-color(tone);
+
+    height: 60px;
+    clip: true;
+    border-radius: 6px;
+    background: selected ? Palette.accent-background.transparentize(0.86) : touch.has-hover ? Theme.card-hover : transparent;
+    animate background { duration: 100ms; }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 12px;
+        spacing: 12px;
+
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 34px;
+                height: 34px;
+                border-radius: 17px;
+                background: root.tone-color.transparentize(0.85);
+                Glyph {
+                    size: 18px;
+                    color: root.tone-color;
+                    source: tone == 2 ? Icons.done : tone == 4 ? Icons.error : tone == 3 ? Icons.warning : tone == 1 ? Icons.sync : Icons.video;
+                }
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            spacing: 2px;
+            Text {
+                text: root.item.name;
+                overflow: elide;
+                font-weight: 600;
+            }
+            Text {
+                text: Texts.file-state(root.item.state, root.item.detail)
+                    + (root.item.progress >= 0 ? "  " + round(root.item.progress * 100) + "%" : "");
+                overflow: elide;
+                font-size: 12px;
+                color: root.tone == 0 ? Theme.muted : root.tone-color;
+            }
+            if root.item.progress >= 0: ProgressBar {
+                value: root.item.progress;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 0;
+            HorizontalLayout {
+                spacing: 4px;
+                alignment: end;
+                if root.item.existing != "": Badge {
+                    text: root.item.existing;
+                    tone: Theme.ok;
+                }
+                if root.item.embedded != "": Badge {
+                    text: @tr("in video: {}", root.item.embedded);
+                    tone: Theme.idle;
+                }
+                if root.item.existing == "" && root.item.embedded == "": Badge {
+                    text: @tr("no subtitle");
+                    tone: Theme.warn;
+                }
+            }
+        }
+    }
+}
+
+// One subtitle a source offers.
+export component CandidateCard inherits Rectangle {
+    in property <CandidateRow> item;
+    in property <bool> selected;
+    callback clicked();
+    callback double-clicked();
+
+    height: 54px;
+    border-radius: 6px;
+    background: selected ? Palette.accent-background.transparentize(0.86) : touch.has-hover ? Theme.card-hover : transparent;
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+        double-clicked => { root.double-clicked(); }
+    }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 10px;
+        spacing: 10px;
+
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 40px;
+                height: 24px;
+                border-radius: 12px;
+                background: root.item.score >= 100 ? Theme.ok : (root.item.score >= 40 ? Theme.warn : Theme.idle);
+                Text {
+                    text: root.item.score;
+                    color: white;
+                    font-size: 12px;
+                    font-weight: 700;
+                }
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            spacing: 2px;
+            Text {
+                text: root.item.release == "" ? @tr("(no release name)") : root.item.release;
+                overflow: elide;
+            }
+            Text {
+                text: root.item.provider
+                    + (root.item.hash-match ? " · " + @tr("made for this file") : "")
+                    + (root.item.trusted ? " · " + @tr("trusted") : "")
+                    + (root.item.fps != "" ? " · " + root.item.fps + " fps" : "")
+                    + (root.item.hearing-impaired ? " · " + @tr("hearing impaired") : "")
+                    + (root.item.machine ? " · " + @tr("machine translated") : "")
+                    + " · " + @tr("{} downloads", root.item.downloads);
+                overflow: elide;
+                font-size: 11px;
+                color: Theme.muted;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            Badge {
+                text: root.item.language;
+                tone: Palette.accent-background;
+            }
+        }
+    }
+}

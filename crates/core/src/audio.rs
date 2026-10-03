@@ -68,16 +68,171 @@ pub(crate) fn command(ffmpeg: &Path) -> Command {
     cmd
 }
 
-/// Speech spans (milliseconds) of the first audio track of `video`. `progress` gets 0.0..=1.0
-/// when the duration is known. Checks `cancel` while decoding.
+/// Pieces shorter than this are not worth a process of their own.
+const MIN_PIECE_MS: i64 = 60_000;
+/// At most this many ffmpeg processes decode at once.
+const MAX_PIECES: usize = 8;
+
+/// A part of the audio: start and length in milliseconds.
+pub type Range = (i64, i64);
+
+/// Length of `video` in milliseconds, from the header ffmpeg prints (no decoding).
+pub fn duration_ms(ffmpeg: &Path, video: &Path) -> Result<Option<i64>> {
+    let output = command(ffmpeg)
+        .args(["-nostdin", "-hide_banner", "-i"])
+        .arg(video)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|e| if e.kind() == ErrorKind::NotFound { Error::NoFfmpeg } else { Error::Io(e) })?;
+    Ok(String::from_utf8_lossy(&output.stderr).lines().find_map(parse_duration))
+}
+
+/// How many decoders to run at once on this computer.
+fn parallelism() -> usize {
+    std::thread::available_parallelism().map_or(2, |n| n.get()).clamp(1, MAX_PIECES)
+}
+
+/// Speech spans (milliseconds) of the first audio track of `video`. Long videos are cut into
+/// pieces decoded at the same time, one ffmpeg per CPU core. `progress` gets 0.0..=1.0 when the
+/// duration is known. Checks `cancel` while decoding.
 pub fn extract_speech(
     ffmpeg: &Path,
     video: &Path,
     cancel: &AtomicBool,
-    progress: &mut dyn FnMut(f32),
+    progress: &mut (dyn FnMut(f32) + Send),
 ) -> Result<Vec<Span>> {
-    let mut child = command(ffmpeg)
-        .args(["-nostdin", "-hide_banner", "-nostats", "-loglevel", "info", "-i"])
+    let duration = duration_ms(ffmpeg, video)?;
+    let pieces = match duration {
+        Some(total) => split(total, parallelism()),
+        None => vec![(0, 0)],
+    };
+    let frames = decode_ranges(ffmpeg, video, &pieces, cancel, progress)?;
+    // Every piece but the last is cut to its exact length, so the frames line up in time.
+    let mut voiced = Vec::new();
+    for (i, (piece, mut v)) in pieces.iter().zip(frames).enumerate() {
+        if i + 1 < pieces.len() {
+            v.resize((piece.1 / FRAME_MS) as usize, false);
+        }
+        voiced.extend(v);
+    }
+    let spans = frames_to_spans(&voiced, FRAME_MS, BRIDGE_MS, MIN_SPEECH_MS);
+    if spans.is_empty() { Err(Error::NoSpeech) } else { Ok(spans) }
+}
+
+/// Speech spans inside each of `windows` (absolute times), decoded at the same time: a quick
+/// look at parts of a long video.
+pub fn sample_speech(
+    ffmpeg: &Path,
+    video: &Path,
+    windows: &[Range],
+    cancel: &AtomicBool,
+    progress: &mut (dyn FnMut(f32) + Send),
+) -> Result<Vec<Vec<Span>>> {
+    let frames = decode_ranges(ffmpeg, video, windows, cancel, progress)?;
+    Ok(windows
+        .iter()
+        .zip(frames)
+        .map(|(w, v)| {
+            frames_to_spans(&v, FRAME_MS, BRIDGE_MS, MIN_SPEECH_MS)
+                .into_iter()
+                .map(|(s, e)| (s + w.0, e + w.0))
+                .collect()
+        })
+        .collect())
+}
+
+/// `total` ms cut into at most `n` equal pieces of at least [`MIN_PIECE_MS`].
+fn split(total: i64, n: usize) -> Vec<Range> {
+    let n = (total / MIN_PIECE_MS).clamp(1, n as i64);
+    // Whole frames per piece, so pieces join without a gap.
+    let len = (total / n / FRAME_MS + 1) * FRAME_MS;
+    (0..n).map(|i| (i * len, if i + 1 == n { 0 } else { len })).collect()
+}
+
+/// Voice decisions per 10 ms frame for each range, `parallelism()` ffmpeg processes at a time.
+/// A range `(start, 0)` reads to the end.
+fn decode_ranges(
+    ffmpeg: &Path,
+    video: &Path,
+    ranges: &[Range],
+    cancel: &AtomicBool,
+    progress: &mut (dyn FnMut(f32) + Send),
+) -> Result<Vec<Vec<bool>>> {
+    let done_frames = AtomicI64::new(0);
+    // Known total frames; a range to the end learns its length from ffmpeg.
+    let known: i64 = ranges.iter().map(|r| r.1 / FRAME_MS).sum();
+    let open_end = AtomicI64::new(0);
+    let progress = std::sync::Mutex::new(progress);
+    let report = || {
+        let total = known + open_end.load(Ordering::Relaxed);
+        if total > 0 {
+            let p = (done_frames.load(Ordering::Relaxed) as f32 / total as f32).min(1.0);
+            (progress.lock().unwrap())(p);
+        }
+    };
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let mut results: Vec<Option<Result<Vec<bool>>>> = (0..ranges.len()).map(|_| None).collect();
+    let slots: Vec<std::sync::Mutex<&mut Option<Result<Vec<bool>>>>> =
+        results.iter_mut().map(std::sync::Mutex::new).collect();
+    std::thread::scope(|scope| {
+        for _ in 0..parallelism().min(ranges.len()) {
+            scope.spawn(|| {
+                loop {
+                    let i = next.fetch_add(1, Ordering::SeqCst);
+                    let Some(&range) = ranges.get(i) else { break };
+                    let result = decode_range(ffmpeg, video, range, cancel, &mut |frames, total| {
+                        done_frames.fetch_add(frames, Ordering::Relaxed);
+                        if range.1 == 0 && total > 0 {
+                            open_end.store((total - range.0) / FRAME_MS, Ordering::Relaxed);
+                        }
+                        report();
+                    });
+                    let failed = result.is_err();
+                    **slots[i].lock().unwrap() = Some(result);
+                    if failed {
+                        // The others stop at their next check.
+                        break;
+                    }
+                }
+            });
+        }
+    });
+    drop(slots);
+    let mut out = Vec::with_capacity(ranges.len());
+    for r in results {
+        match r {
+            Some(r) => out.push(r?),
+            // Not started because another range failed or Stop was pressed.
+            None if cancel.load(Ordering::Relaxed) => return Err(Error::Cancelled),
+            None => return Err(Error::Ffmpeg("decoding stopped".into())),
+        }
+    }
+    (progress.lock().unwrap())(1.0);
+    Ok(out)
+}
+
+/// Voice decisions for one range. `on_frames` gets (frames since the last call, the video's
+/// duration in ms or 0 while unknown).
+fn decode_range(
+    ffmpeg: &Path,
+    video: &Path,
+    (start, len): Range,
+    cancel: &AtomicBool,
+    on_frames: &mut dyn FnMut(i64, i64),
+) -> Result<Vec<bool>> {
+    let mut cmd = command(ffmpeg);
+    cmd.args(["-nostdin", "-hide_banner", "-nostats", "-loglevel", "info"]);
+    // Before -i: ffmpeg seeks in the file and then decodes exactly from `start`.
+    if start > 0 {
+        cmd.arg("-ss").arg(format!("{:.3}", start as f64 / 1000.0));
+    }
+    if len > 0 {
+        cmd.arg("-t").arg(format!("{:.3}", len as f64 / 1000.0));
+    }
+    let mut child = cmd
+        .arg("-i")
         .arg(video)
         .args(["-map", "0:a:0", "-vn", "-sn", "-dn", "-ac", "1", "-ar", "8000", "-f", "s16le", "-acodec", "pcm_s16le"])
         .arg("pipe:1")
@@ -117,6 +272,7 @@ pub fn extract_speech(
             Err(e) if e.kind() == ErrorKind::UnexpectedEof => break,
             Err(e) => {
                 let _ = child.kill();
+                let _ = child.wait();
                 return Err(e.into());
             }
         }
@@ -130,21 +286,17 @@ pub fn extract_speech(
                 let _ = child.wait();
                 return Err(Error::Cancelled);
             }
-            let total = duration_ms.load(Ordering::Relaxed);
-            if total > 0 {
-                progress((voiced.len() as i64 * FRAME_MS) as f32 / total as f32);
-            }
+            on_frames(1000, duration_ms.load(Ordering::Relaxed));
         }
     }
+    on_frames((voiced.len() % 1000) as i64, duration_ms.load(Ordering::Relaxed));
     let status = child.wait()?;
     let tail = stderr_thread.join().unwrap_or_default();
     if !status.success() {
         let last = tail.iter().rev().find(|l| !l.trim().is_empty()).cloned().unwrap_or_default();
         return Err(Error::Ffmpeg(last));
     }
-    progress(1.0);
-    let spans = frames_to_spans(&voiced, FRAME_MS, BRIDGE_MS, MIN_SPEECH_MS);
-    if spans.is_empty() { Err(Error::NoSpeech) } else { Ok(spans) }
+    Ok(voiced)
 }
 
 /// `  Duration: 01:23:45.67, start: …` → milliseconds.
@@ -162,6 +314,18 @@ pub(crate) fn parse_duration(line: &str) -> Option<i64> {
 mod tests {
     use super::*;
     use crate::sync::{merge, overlap};
+
+    #[test]
+    fn splits_into_pieces() {
+        assert_eq!(split(30_000, 8), vec![(0, 0)], "short: one piece");
+        assert_eq!(
+            split(7_200_000, 4),
+            vec![(0, 1_800_010), (1_800_010, 1_800_010), (3_600_020, 1_800_010), (5_400_030, 0)]
+        );
+        let p = split(200_000, 8);
+        assert_eq!(p.len(), 3, "at least a minute each: {p:?}");
+        assert!(p.windows(2).all(|w| w[0].0 + w[0].1 == w[1].0));
+    }
 
     #[test]
     fn parses_ffmpeg_duration() {

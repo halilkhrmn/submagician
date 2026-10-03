@@ -1,0 +1,387 @@
+import { Button, LineEdit, Switch, ComboBox, ScrollView, Palette } from "std-widgets.slint";
+import { Theme, Icons } from "theme.slint";
+import { AppState } from "state.slint";
+import { Card, PageHeader, SettingRow, Glyph, Note } from "components.slint";
+
+component Field inherits VerticalLayout {
+    in property <string> label;
+    spacing: 4px;
+    Text {
+        text: root.label;
+        font-size: 12px;
+        color: Theme.muted;
+    }
+    @children
+}
+
+component Divider inherits Rectangle {
+    height: 1px;
+    background: Theme.border;
+}
+
+export component SettingsPage inherits VerticalLayout {
+    padding: Theme.page-padding;
+    spacing: 16px;
+
+    PageHeader {
+        title: @tr("Settings");
+        subtitle: @tr("Changes are saved as you make them.");
+    }
+
+    ScrollView {
+        VerticalLayout {
+            spacing: 14px;
+            padding-right: 12px;
+            alignment: start;
+
+            Card {
+                title: @tr("Subtitles");
+                icon: Icons.captions;
+                has-icon: true;
+                Field {
+                    label: @tr("Languages, most wanted first (for example: tr, en)");
+                    LineEdit {
+                        text <=> AppState.languages;
+                        placeholder-text: "tr, en";
+                        edited => { AppState.settings-edited(); }
+                    }
+                }
+                SettingRow {
+                    title: @tr("Skip videos that already have one");
+                    description: @tr("\"Get subtitles for all\" leaves videos alone that have a subtitle in the first language, next to them or inside.");
+                    Switch {
+                        accessible-label: @tr("Skip videos that already have one");
+                        checked <=> AppState.skip-existing;
+                        toggled => { AppState.settings-changed(); }
+                    }
+                }
+            }
+
+            Card {
+                title: @tr("Sources");
+                icon: Icons.globe;
+                has-icon: true;
+                SettingRow {
+                    title: "OpenSubtitles";
+                    description: @tr("The largest collection; matches files by their hash.");
+                    Switch {
+                        accessible-label: "OpenSubtitles";
+                        checked <=> AppState.use-opensubtitles;
+                        toggled => { AppState.settings-changed(); }
+                    }
+                }
+                SettingRow {
+                    title: "SubDL";
+                    description: AppState.has-subdl-key ? @tr("Films and series, many languages.") : @tr("Needs an API key (subdl.com, free).");
+                    Switch {
+                        accessible-label: "SubDL";
+                        checked <=> AppState.use-subdl;
+                        toggled => { AppState.settings-changed(); }
+                    }
+                }
+                SettingRow {
+                    title: "Addic7ed";
+                    description: @tr("TV series, through Gestdown.");
+                    Switch {
+                        accessible-label: "Addic7ed";
+                        checked <=> AppState.use-addic7ed;
+                        toggled => { AppState.settings-changed(); }
+                    }
+                }
+                Field {
+                    label: AppState.has-subdl-key ? @tr("Your SubDL API key (optional, a built-in key is used)") : @tr("SubDL API key (SubDL is skipped without one)");
+                    LineEdit {
+                        text <=> AppState.subdl-api-key;
+                        edited => { AppState.settings-edited(); }
+                    }
+                }
+                SettingRow {
+                    title: @tr("Search results are kept for 3 days");
+                    description: @tr("Clear them to ask the sources again for every video.");
+                    Button {
+                        text: @tr("Clear");
+                        clicked => { AppState.clear-cache(); }
+                    }
+                }
+            }
+
+            Card {
+                title: @tr("OpenSubtitles account");
+                icon: Icons.person;
+                has-icon: true;
+                Text {
+                    text: @tr("Optional. Logging in raises the daily download limit.");
+                    font-size: 12px;
+                    color: Theme.muted;
+                    wrap: word-wrap;
+                }
+                HorizontalLayout {
+                    spacing: 12px;
+                    Field {
+                        label: @tr("User name");
+                        LineEdit {
+                            text <=> AppState.os-username;
+                            edited => { AppState.settings-edited(); }
+                        }
+                    }
+                    Field {
+                        label: @tr("Password");
+                        LineEdit {
+                            text <=> AppState.os-password;
+                            input-type: password;
+                            edited => { AppState.settings-edited(); }
+                        }
+                    }
+                }
+                Field {
+                    label: AppState.has-builtin-key ? @tr("Your API key (optional, a built-in key is used)") : @tr("API key (required: this build has no built-in key)");
+                    LineEdit {
+                        text <=> AppState.os-api-key;
+                        edited => { AppState.settings-edited(); }
+                    }
+                }
+            }
+
+            Card {
+                title: @tr("Timing");
+                icon: Icons.clock;
+                has-icon: true;
+                SettingRow {
+                    title: @tr("Sync every downloaded subtitle to the audio");
+                    description: @tr("Fixes the frame rate, the offset and breaks (ads, recaps); the subtitle is changed only when it fits the speech better.");
+                    Switch {
+                        accessible-label: @tr("Sync every downloaded subtitle to the audio");
+                        checked <=> AppState.auto-sync;
+                        toggled => { AppState.settings-changed(); }
+                    }
+                }
+                if AppState.ffmpeg-found != "": Text {
+                    text: @tr("ffmpeg: {}", AppState.ffmpeg-found);
+                    font-size: 12px;
+                    color: Theme.muted;
+                    wrap: word-wrap;
+                }
+                if AppState.ffmpeg-found == "": Note {
+                    icon: Icons.warning;
+                    tone: Theme.warn;
+                    text: AppState.can-download-ffmpeg
+                        ? @tr("ffmpeg was not found. It is needed to sync to the audio and to read the subtitle tracks inside videos.")
+                        : @tr("ffmpeg was not found. Install it with your package manager, for example: sudo apt install ffmpeg");
+                }
+                if AppState.ffmpeg-found == "" && AppState.can-download-ffmpeg: HorizontalLayout {
+                    alignment: start;
+                    Button {
+                        text: @tr("Download ffmpeg (about 110 MB)");
+                        icon: Icons.download;
+                        colorize-icon: true;
+                        primary: true;
+                        enabled: !AppState.busy;
+                        clicked => { AppState.download-ffmpeg(); }
+                    }
+                }
+                Field {
+                    label: @tr("ffmpeg path (optional)");
+                    LineEdit {
+                        text <=> AppState.ffmpeg-path;
+                        edited => { AppState.settings-edited(); }
+                    }
+                }
+            }
+
+            Card {
+                title: @tr("Speech (Whisper)");
+                icon: Icons.mic;
+                has-icon: true;
+                Text {
+                    text: @tr("Writes a subtitle from the video's audio when no source has one. Runs on this computer; the model is downloaded once. Into English it can translate any language; other languages are written as spoken.");
+                    font-size: 12px;
+                    color: Theme.muted;
+                    wrap: word-wrap;
+                }
+                SettingRow {
+                    title: @tr("Model");
+                    description: @tr("Bigger models are slower and more accurate.");
+                    ComboBox {
+                        model: AppState.whisper-models;
+                        current-index <=> AppState.whisper-model-index;
+                        selected => { AppState.whisper-model-changed(self.current-index); }
+                    }
+                    Button {
+                        text: AppState.whisper-installed ? @tr("Downloaded") : @tr("Download");
+                        icon: AppState.whisper-installed ? Icons.done : Icons.download;
+                        colorize-icon: true;
+                        enabled: !AppState.whisper-installed && !AppState.busy;
+                        clicked => { AppState.download-model(); }
+                    }
+                }
+                SettingRow {
+                    title: @tr("Write one from the audio when no source has it");
+                    description: @tr("Slow: minutes per video.");
+                    Switch {
+                        accessible-label: @tr("Write one from the audio when no source has it");
+                        checked <=> AppState.generate-missing;
+                        toggled => { AppState.settings-changed(); }
+                    }
+                }
+            }
+
+            Card {
+                title: @tr("File manager");
+                icon: Icons.folder;
+                has-icon: true;
+                SettingRow {
+                    title: @tr("\"Find subtitles with SubMagician\" in the right-click menu");
+                    description: @tr("For folders and videos. On Linux SubMagician is also added to \"Open with\".");
+                    Button {
+                        text: AppState.menu-installed ? @tr("Remove") : @tr("Add");
+                        clicked => { AppState.set-menu(!AppState.menu-installed); }
+                    }
+                }
+            }
+
+            Card {
+                title: @tr("Updates");
+                icon: Icons.update;
+                has-icon: true;
+                SettingRow {
+                    title: @tr("Look for updates when SubMagician starts");
+                    description: @tr("Asks GitHub for the newest release; nothing is downloaded without you.");
+                    Switch {
+                        accessible-label: @tr("Look for updates when SubMagician starts");
+                        checked <=> AppState.check-updates;
+                        toggled => { AppState.settings-changed(); }
+                    }
+                }
+                SettingRow {
+                    title: @tr("Version {}", AppState.version);
+                    description: AppState.update-state == 1 ? @tr("Checking…")
+                        : AppState.update-state == 2 || AppState.update-state == 3 ? @tr("Version {} is available.", AppState.update-version)
+                        : AppState.update-state == 4 ? @tr("Downloading version {}…", AppState.update-version)
+                        : AppState.update-state == 6 ? @tr("Could not check: {}", AppState.update-error)
+                        : "";
+                    Button {
+                        text: @tr("What's new");
+                        clicked => { AppState.show-whats-new(); }
+                    }
+                    if AppState.update-state == 2: Button {
+                        text: @tr("Update now");
+                        primary: true;
+                        clicked => { AppState.install-update(); }
+                    }
+                    if AppState.update-state == 3: Button {
+                        text: @tr("Download");
+                        primary: true;
+                        clicked => { AppState.open-release(); }
+                    }
+                    if AppState.update-state != 2 && AppState.update-state != 3: Button {
+                        text: @tr("Check now");
+                        enabled: AppState.update-state != 1 && AppState.update-state != 4;
+                        clicked => { AppState.check-for-update(); }
+                    }
+                }
+            }
+
+            Card {
+                title: @tr("Logs and problems");
+                icon: Icons.logs;
+                has-icon: true;
+                Text {
+                    text: @tr("Warnings and errors are always written to errors.log, so a problem can be explained afterwards. Nothing is sent anywhere unless you send a report.");
+                    font-size: 12px;
+                    color: Theme.muted;
+                    wrap: word-wrap;
+                }
+                SettingRow {
+                    title: @tr("Save detailed logs");
+                    description: @tr("Every step into one file per day; files older than 14 days are deleted. Turn it on when something goes wrong, then send a report.");
+                    Switch {
+                        accessible-label: @tr("Save detailed logs");
+                        checked <=> AppState.detailed-logs;
+                        toggled => { AppState.settings-changed(); }
+                    }
+                }
+                SettingRow {
+                    title: @tr("Log folder");
+                    description: AppState.log-dir;
+                    Button {
+                        text: @tr("Open");
+                        icon: Icons.folder-open;
+                        colorize-icon: true;
+                        clicked => { AppState.open-log-folder(); }
+                    }
+                }
+                Divider { }
+                SettingRow {
+                    title: @tr("Something not working?");
+                    description: @tr("Prepares a report with the recent log for GitHub or e-mail. You see everything before it is sent.");
+                    Button {
+                        text: @tr("Report a problem");
+                        icon: Icons.bug;
+                        colorize-icon: true;
+                        clicked => { AppState.report-problem(); }
+                    }
+                }
+            }
+
+            Card {
+                title: @tr("About");
+                icon: Icons.info;
+                has-icon: true;
+                HorizontalLayout {
+                    spacing: 16px;
+                    Image {
+                        source: Icons.logo;
+                        width: 56px;
+                        height: 56px;
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        spacing: 2px;
+                        Text {
+                            text: "SubMagician " + AppState.version;
+                            font-size: 18px;
+                            font-weight: 700;
+                        }
+                        Text {
+                            text: @tr("Finds subtitles for your videos, picks the one made for your file, fixes its encoding and timing, and saves it next to the video.");
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+                Text {
+                    text: @tr("Subtitles from OpenSubtitles.com, SubDL and Addic7ed (through Gestdown). Speech recognition by whisper.cpp, audio by ffmpeg, icons from Fluent UI System Icons, window by Slint.");
+                    font-size: 12px;
+                    color: Theme.muted;
+                    wrap: word-wrap;
+                }
+                Text {
+                    text: @tr("Free software under the GNU AGPL 3.0.");
+                    font-size: 12px;
+                    color: Theme.muted;
+                }
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: start;
+                    Button {
+                        text: @tr("Website");
+                        icon: Icons.code;
+                        colorize-icon: true;
+                        clicked => { AppState.open-link("repo"); }
+                    }
+                    Button {
+                        text: @tr("Release notes");
+                        icon: Icons.open;
+                        colorize-icon: true;
+                        clicked => { AppState.open-link("releases"); }
+                    }
+                    Button {
+                        text: @tr("License");
+                        icon: Icons.open;
+                        colorize-icon: true;
+                        clicked => { AppState.open-link("license"); }
+                    }
+                }
+            }
+        }
+    }
+}

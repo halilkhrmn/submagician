@@ -32,4 +32,7 @@ pub enum Error {
     NoSpeech,
     #[error("cancelled")]
     Cancelled,
+    /// A failure reported by the worker process, as text.
+    #[error("{0}")]
+    Other(String),
 }

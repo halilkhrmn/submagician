@@ -99,7 +99,7 @@ Numbered, newest last. Each: what, and why.
 35. **File dialogs are owned by the window** (rfd `set_parent`), so on Windows they cannot open
     behind it and leave the window looking frozen. The app logs to `submagician.log` in its data
     folder (replaced at each start, panics included) because a Windows release build has no
-    console.
+    console. (Replaced by 42: `logs/errors.log` and daily files.)
 36. **Whisper through `whisper-rs` (whisper.cpp), behind the core feature `whisper`.** Runs on the
     CPU on all platforms with no Python or service; CMake builds it. The app and CLI turn the
     feature on; core can still be built without it.
@@ -116,3 +116,39 @@ Numbered, newest last. Each: what, and why.
     translate into other languages.
 41. **The raw abort callback, not `set_abort_callback_safe`**: whisper-rs 0.16 calls the safe
     closure through the wrong type (undefined behaviour that aborted runs at random here).
+42. **One log for the app, `core::applog`**: warnings, errors and panics always go to
+    `errors.log` (kept under 1 MB) so a problem can be explained afterwards; every line goes to
+    daily files only when "Save detailed logs" is on (14 days). The newest 500 lines stay in
+    memory for "Report a problem", which shows the text first and sends nothing by itself (GitHub
+    issue link, or mailto to the support address, with the full report saved to a file).
+43. **Updates only for copies that can replace themselves**: the per-user installer (its
+    uninstaller sits next to the exe) and the AppImage. The download must match the SHA-256
+    digest GitHub publishes for the release file. A deb or portable copy only gets a link. A 404
+    from GitHub (no release, or a private repository) means "no update".
+44. **Sidebar instead of tabs**, with About, Logs and Updates inside Settings (the owner asked
+    for that), and Player plugins as its own page so it is easy to find. All state lives in one
+    `AppState` global so the pages can be split into files. Settings save as they change (text
+    after a 0.7 s pause).
+45. **Player plugins run the command-line tool** (`submagician-cli --player`, machine-readable
+    lines) instead of reimplementing search in Lua: same settings, sources, sync and Whisper as
+    the app. The AppImage's AppRun runs the tool for `--cli`. Installed scripts get the command
+    written in and are rewritten at every start (the AppImage may have moved). VLC gets a
+    `file://` URI (ASCII) and, on Windows, the tool's 8.3 path if it has other letters, because
+    VLC runs it through `cmd.exe` in the ANSI code page. Flatpak/Snap players are listed but
+    cannot run programs outside their sandbox.
+46. **Fast sync = quick look first**: 10 windows of 40 s across the film are decoded at once and
+    one ratio + shift fitted (alass without splits). It is used only when every window agrees
+    with it (≥ 85 % of that window's own best fit), ≥ 55 % of the subtitle time in the windows is
+    on speech and ≥ 25 lines fall inside; otherwise the whole audio is read in pieces (one ffmpeg
+    per core, at least a minute each) and alass aligns with splits. Speech found by a full read is
+    cached on disk per file (path, size, modification time).
+47. **Heavy jobs in a worker process** (`submagician-cli --worker <JSON>`): a crash in
+    whisper.cpp or a decoder ends that process only, Stop kills it, and progress comes back as
+    lines. Without the tool next to the app the same code runs in-process.
+48. **Subtitles inside a video are taken out as a file** (`<stem>.<lang>.srt`/`.ass`) and synced,
+    not rewritten inside the video: remuxing a large file is slow and needs space. Picture
+    tracks (PGS/VobSub) would need OCR and are refused with a clear message.
+49. **Windows installer per user** (no admin rights; `%LOCALAPPDATA%\Programs\SubMagician`)
+    with ffmpeg and ffprobe bundled (gyan.dev essentials, SHA-256 checked in the build, GPL text
+    included), so syncing works out of the box; the Settings download stays for portable
+    copies.

@@ -1,0 +1,184 @@
+name: Release
+
+# A new version is published when `main` gets a `version` in Cargo.toml that has no tag yet
+# (merge a pull request that raises it); the workflow creates the tag vX.Y.Z itself. Pushing a
+# tag by hand works too. Actions → Release → Run workflow builds and tests everything without
+# publishing (a dry run). See docs/RELEASING.md.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Two quick merges must not publish the same version twice.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  SUBMAGICIAN_OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
+  SUBMAGICIAN_SUBDL_API_KEY: ${{ secrets.SUBDL_API_KEY }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      build: ${{ steps.plan.outputs.build }}
+      publish: ${{ steps.plan.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decide what to do
+        id: plan
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          tag="v$version"
+          build=false
+          publish=false
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            build=true
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
+            if [ "$tag" != "${{ github.ref_name }}" ]; then
+              echo "::error::Tag ${{ github.ref_name }} does not match Cargo.toml version $version"
+              exit 1
+            fi
+            build=true
+            publish=true
+          elif git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+            echo "$tag is already released; nothing to publish (raise the version to release)"
+          else
+            build=true
+            publish=true
+          fi
+          if ! grep -q "^## $version\$" changelog/en.md; then
+            echo "::error::changelog/en.md has no '## $version' section"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+
+  windows:
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Inno Setup (if the runner lacks it)
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+      - name: Build the installer and the portable zip
+        shell: pwsh
+        run: ./tools/build-installer.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: target/dist/*
+          if-no-files-found: error
+
+  # Built on the oldest supported Ubuntu so the binaries run on newer glibc versions too.
+  linux:
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build dependencies and packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev dpkg-dev file
+          cargo install --locked cargo-deb
+      - name: Build the .deb and the AppImage
+        run: ./tools/build-linux-packages.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            target/linux/*.deb
+            target/linux/*.AppImage
+          if-no-files-found: error
+
+  # Install each package on a clean system and start it before anything is published.
+  smoke-linux:
+    needs: [plan, linux]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: .deb on Ubuntu 24.04
+            kind: deb
+            pattern: "*.deb"
+            setup: apt-get update && apt-get install -y xvfb xauth
+          - name: AppImage on Ubuntu 24.04
+            kind: appimage
+            pattern: "*.AppImage"
+            setup: apt-get update && apt-get install -y xvfb xauth libfontconfig1 libxkbcommon-x11-0 libx11-xcb1 libxcursor1 libxi6 libxrandr2
+    name: Smoke test, ${{ matrix.name }}
+    container: ubuntu:24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux
+          path: dist
+      - name: Prepare the system
+        run: ${{ matrix.setup }}
+      - name: Install and start
+        run: bash tools/smoke-linux.sh ${{ matrix.kind }} "dist/${{ matrix.pattern }}"
+
+  smoke-windows:
+    needs: [plan, windows]
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows
+          path: dist
+      - name: Install, start, uninstall
+        shell: pwsh
+        run: ./tools/smoke-windows.ps1 "dist/submagician-setup-${{ needs.plan.outputs.version }}.exe"
+
+  publish:
+    needs: [plan, windows, linux, smoke-linux, smoke-windows]
+    if: needs.plan.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    env:
+      TAG: v${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum * | tee SHA256SUMS.txt
+      # The user-facing notes of this version (changelog/en.md, also shown in the app), then
+      # GitHub's list of merged pull requests.
+      - name: Release notes
+        run: awk -v v="## ${TAG#v}" '$0 == v { f = 1; next } /^## / { f = 0 } f' changelog/en.md > release-notes.md
+      - name: Publish the GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          target_commitish: ${{ github.sha }}
+          name: SubMagician ${{ env.TAG }}
+          body_path: release-notes.md
+          generate_release_notes: true
+          files: dist/*

@@ -1,768 +1,168 @@
-import { Button, LineEdit, CheckBox, TabWidget, GroupBox, ListView, ProgressIndicator, ComboBox, AboutSlint, Palette, VerticalBox, HorizontalBox, ScrollView } from "std-widgets.slint";
+import { Button, ProgressIndicator, Palette } from "std-widgets.slint";
+import { Theme, Icons } from "theme.slint";
+import { AppState, Texts, Page, FileRow, CandidateRow, PlayerRow } from "state.slint";
+import { NavItem, Glyph } from "components.slint";
+import { LibraryPage } from "library.slint";
+import { PlayersPage } from "players.slint";
+import { SettingsPage } from "settings.slint";
+import { WhatsNewDialog, ReportDialog } from "dialogs.slint";
 
-export struct FileRow {
-    name: string,
-    folder: string,
-    // Languages of the subtitles already next to the video ("tr, en").
-    existing: string,
-    // Languages of subtitle tracks inside the video ("tr").
-    embedded: string,
-    // It has a subtitle (file or track) in the most wanted language.
-    has-wanted: bool,
-    // See Texts.file-state.
-    state: int,
-    detail: string,
-}
-
-export struct CandidateRow {
-    score: int,
-    language: string,
-    release: string,
-    provider: string,
-    downloads: int,
-    hash-match: bool,
-    trusted: bool,
-    machine: bool,
-    hearing-impaired: bool,
-    fps: string,
-}
-
-// Texts built from state codes, so every visible string goes through @tr.
-export global Texts {
-    // 0 waiting, 1 searching, 2 found (detail = count), 3 nothing found, 4 downloading,
-    // 5 saved (detail = file name), 6 error (detail = message), 7 already has a wanted subtitle,
-    // 8 syncing, 9 synced (detail = "+1.20 s · 25 → 23.976 fps"), 10 sync failed (detail), 11 timing already fine,
-    // 12 generating from audio, 13 generated (detail = file)
-    public pure function file-state(state: int, detail: string) -> string {
-        if state == 1 { return @tr("Searching…"); }
-        if state == 2 { return @tr("{} candidates", detail); }
-        if state == 3 { return @tr("Nothing found"); }
-        if state == 4 { return @tr("Downloading…"); }
-        if state == 5 { return @tr("Saved"); }
-        if state == 6 { return @tr("Error: {}", detail); }
-        if state == 7 { return @tr("Already has subtitle"); }
-        if state == 8 { return @tr("Syncing…"); }
-        if state == 9 { return @tr("Synced {}", detail); }
-        if state == 10 { return @tr("Saved, sync failed: {}", detail); }
-        if state == 11 { return @tr("Saved, timing fits"); }
-        if state == 12 { return @tr("Listening…"); }
-        if state == 13 { return @tr("Written from audio"); }
-        return @tr("Waiting");
-    }
-
-    public pure function state-color(state: int) -> color {
-        if state == 1 || state == 4 || state == 8 || state == 12 { return #3b82f6; }
-        if state == 13 { return #16a34a; }
-        if state == 10 { return #d97706; }
-        if state == 9 || state == 11 { return #16a34a; }
-        if state == 2 { return #d97706; }
-        if state == 3 || state == 6 { return #dc2626; }
-        if state == 5 || state == 7 { return #16a34a; }
-        return #9ca3af;
-    }
-
-    // 0 ready, 1 scanning, 2 scanned (a = videos), 3 searching (a/b), 4 downloading (a/b),
-    // 5 finished (a = saved, b = failed), 6 error (detail), 7 stopped, 8 download limit (detail),
-    // 9 one file saved (detail = name, a = downloads left or -1), 10 settings saved,
-    // 11 search finished (a = videos with candidates, b = videos searched), 12 reading audio (a = %),
-    // 13 synced (a/b = speech match before/after %, detail = shift), 14 no ffmpeg,
-    // 15 timing already fits (a = speech match %), 16 shifted (a = ms, detail = file), 17 nothing to sync,
-    // 18 search cache cleared, 19 file-manager entry added, 20 removed, 21 watch: new video (detail),
-    // 22 previous subtitle restored (detail = file), 23 no previous subtitle, 24 model download (a = %),
-    // 25 model ready (detail = id), 26 listening (a = %), 27 written from audio (detail = file), 28 no model
-    // 29 ffmpeg download (a = %), 30 ffmpeg ready
-    public pure function status(kind: int, a: int, b: int, detail: string) -> string {
-        if kind == 1 { return @tr("Scanning folder…"); }
-        if kind == 2 { return @tr("Found {} videos.", a); }
-        if kind == 3 { return @tr("Searching {} / {}…", a, b); }
-        if kind == 4 { return @tr("Downloading {} / {}…", a, b); }
-        if kind == 5 { return @tr("Done: {} saved, {} without subtitle.", a, b); }
-        if kind == 6 { return @tr("Error: {}", detail); }
-        if kind == 7 { return @tr("Stopped."); }
-        if kind == 8 { return @tr("Download limit reached: {}", detail); }
-        if kind == 9 && a >= 0 { return @tr("Saved {} ({} downloads left today).", detail, a); }
-        if kind == 9 { return @tr("Saved {}.", detail); }
-        if kind == 10 { return @tr("Settings saved."); }
-        if kind == 11 { return @tr("Search finished: {} of {} videos have subtitles.", a, b); }
-        if kind == 12 { return @tr("Reading the audio… {}%", a); }
-        if kind == 13 { return @tr("Synced: {}. Speech match {}% → {}%.", detail, a, b); }
-        if kind == 14 { return @tr("ffmpeg not found, so the subtitle was saved but not synced. Settings → Timing can get it."); }
-        if kind == 15 { return @tr("Timing already fits ({}% speech match); left unchanged.", a); }
-        if kind == 16 { return @tr("Moved {} by {} ms.", detail, a); }
-        if kind == 17 { return @tr("This video has no subtitle to sync yet."); }
-        if kind == 18 { return @tr("Search cache cleared."); }
-        if kind == 19 { return @tr("\"Find subtitles with SubMagician\" is now in the file manager's menu."); }
-        if kind == 20 { return @tr("Removed from the file manager's menu."); }
-        if kind == 21 { return @tr("New video in the folder: {}", detail); }
-        if kind == 22 { return @tr("Put back the previous {}.", detail); }
-        if kind == 23 { return @tr("There is no previous subtitle to put back."); }
-        if kind == 24 { return @tr("Downloading the speech model… {}%", a); }
-        if kind == 25 { return @tr("Speech model {} is ready.", detail); }
-        if kind == 26 { return @tr("Listening to the audio… {}%", a); }
-        if kind == 27 { return @tr("Wrote {} from the audio.", detail); }
-        if kind == 28 { return @tr("No speech model yet: download one in Settings → Speech."); }
-        if kind == 29 { return @tr("Downloading ffmpeg… {}%", a); }
-        if kind == 30 { return @tr("ffmpeg is ready; subtitles can be synced to the audio now."); }
-        return @tr("Ready.");
-    }
-}
-
-component FileItem inherits Rectangle {
-    in property <FileRow> item;
-    in property <bool> selected;
-    in property <bool> even;
-    callback clicked();
-
-    height: 46px;
-    clip: true;
-    background: selected ? Palette.selection-background : (even ? transparent : Palette.alternate-background);
-
-    TouchArea {
-        clicked => { root.clicked(); }
-    }
-
-    HorizontalLayout {
-        padding-left: 10px;
-        padding-right: 10px;
-        spacing: 10px;
-
-        VerticalLayout {
-            alignment: center;
-            Rectangle {
-                width: 10px;
-                height: 10px;
-                border-radius: 5px;
-                background: Texts.state-color(root.item.state);
-            }
-        }
-
-        VerticalLayout {
-            alignment: center;
-            horizontal-stretch: 1;
-            Text {
-                text: root.item.name;
-                overflow: elide;
-                color: root.selected ? Palette.selection-foreground : Palette.foreground;
-            }
-            Text {
-                text: root.item.folder;
-                overflow: elide;
-                font-size: 11px;
-                opacity: 0.6;
-                color: root.selected ? Palette.selection-foreground : Palette.foreground;
-            }
-        }
-
-        VerticalLayout {
-            alignment: center;
-            width: 150px;
-            Text {
-                text: Texts.file-state(root.item.state, root.item.detail);
-                overflow: elide;
-                horizontal-alignment: right;
-                color: root.selected ? Palette.selection-foreground : Palette.foreground;
-            }
-            Text {
-                text: (root.item.existing == "" ? "" : @tr("Has: {}", root.item.existing))
-                    + (root.item.existing != "" && root.item.embedded != "" ? " · " : "")
-                    + (root.item.embedded == "" ? "" : @tr("In video: {}", root.item.embedded));
-                overflow: elide;
-                font-size: 11px;
-                opacity: 0.6;
-                horizontal-alignment: right;
-                color: root.selected ? Palette.selection-foreground : Palette.foreground;
-            }
-        }
-    }
-}
-
-component CandidateItem inherits Rectangle {
-    in property <CandidateRow> item;
-    in property <bool> selected;
-    in property <bool> even;
-    callback clicked();
-    callback double-clicked();
-
-    height: 50px;
-    background: selected ? Palette.selection-background : (even ? transparent : Palette.alternate-background);
-
-    TouchArea {
-        clicked => { root.clicked(); }
-        double-clicked => { root.double-clicked(); }
-    }
-
-    HorizontalLayout {
-        padding-left: 10px;
-        padding-right: 10px;
-        spacing: 10px;
-
-        VerticalLayout {
-            alignment: center;
-            Rectangle {
-                width: 46px;
-                height: 26px;
-                border-radius: 6px;
-                background: root.item.score >= 100 ? #16a34a : (root.item.score >= 40 ? #d97706 : #6b7280);
-                Text {
-                    text: root.item.score;
-                    color: white;
-                    font-weight: 700;
-                }
-            }
-        }
-
-        VerticalLayout {
-            alignment: center;
-            horizontal-stretch: 1;
-            Text {
-                text: root.item.release == "" ? @tr("(no release name)") : root.item.release;
-                overflow: elide;
-                color: root.selected ? Palette.selection-foreground : Palette.foreground;
-            }
-            Text {
-                text: root.item.provider
-                    + (root.item.hash-match ? " · " + @tr("hash match") : "")
-                    + (root.item.trusted ? " · " + @tr("trusted") : "")
-                    + (root.item.fps != "" ? " · " + root.item.fps + " fps" : "")
-                    + (root.item.hearing-impaired ? " · " + @tr("hearing impaired") : "")
-                    + (root.item.machine ? " · " + @tr("machine translated") : "");
-                overflow: elide;
-                font-size: 11px;
-                opacity: 0.7;
-                color: root.selected ? Palette.selection-foreground : Palette.foreground;
-            }
-        }
-
-        VerticalLayout {
-            alignment: center;
-            width: 90px;
-            Text {
-                text: root.item.language;
-                font-weight: 700;
-                horizontal-alignment: right;
-                color: root.selected ? Palette.selection-foreground : Palette.foreground;
-            }
-            Text {
-                text: @tr("{} downloads", root.item.downloads);
-                font-size: 11px;
-                opacity: 0.6;
-                horizontal-alignment: right;
-                color: root.selected ? Palette.selection-foreground : Palette.foreground;
-            }
-        }
-    }
-}
-
-component Placeholder inherits Rectangle {
-    in property <string> text;
-    Text {
-        text: root.text;
-        opacity: 0.6;
-        wrap: word-wrap;
-        horizontal-alignment: center;
-        width: parent.width - 40px;
-    }
-}
+export { AppState, Texts, FileRow, CandidateRow, PlayerRow, Page }
 
 export component AppWindow inherits Window {
     title: "SubMagician";
     icon: @image-url("../assets/icon.svg");
-    preferred-width: 1180px;
-    preferred-height: 720px;
-    min-width: 900px;
-    min-height: 480px;
+    preferred-width: 1240px;
+    preferred-height: 780px;
+    min-width: 940px;
+    min-height: 560px;
+    background: Theme.content;
 
-    in property <string> version;
-    in property <string> folder;
-    in property <[FileRow]> files;
-    in property <[CandidateRow]> candidates;
-    in-out property <int> selected-file: -1;
-    in-out property <int> selected-candidate: -1;
-    in property <bool> busy;
-    in property <bool> candidates-loading;
-    in property <float> progress;
-    in property <int> status-kind;
-    in property <int> status-a;
-    in property <int> status-b;
-    in property <string> status-detail;
-    in property <bool> has-builtin-key;
+    property <bool> update-banner: !AppState.update-dismissed && (AppState.update-state == 2 || AppState.update-state == 3 || AppState.update-state == 4);
 
-    // Settings
-    in-out property <string> languages;
-    in-out property <bool> recursive;
-    in-out property <bool> skip-existing;
-    in-out property <string> os-username;
-    in-out property <string> os-password;
-    in-out property <string> os-api-key;
-    in-out property <bool> auto-sync;
-    in-out property <string> ffmpeg-path;
-    // Where ffmpeg was found, "" if not.
-    in property <string> ffmpeg-found;
-    in-out property <bool> use-opensubtitles;
-    in-out property <bool> use-subdl;
-    in-out property <bool> use-addic7ed;
-    in-out property <string> subdl-api-key;
-    in property <bool> has-subdl-key;
-
-    callback choose-folder();
-    callback rescan();
-    callback search-all();
-    callback download-all();
-    callback stop();
-    callback file-selected(int);
-    callback search-file(int);
-    callback download-candidate(int);
-    callback sync-audio(int);
-    callback sync-reference(int);
-    callback shift(int, int);
-    callback clear-cache();
-    callback set-menu(bool);
-    callback toggle-watch(bool);
-    callback search-as(int, string);
-    callback restore(int);
-    callback generate(int);
-    callback download-model();
-    callback whisper-model-changed(int);
-    in property <[string]> whisper-models;
-    in-out property <int> whisper-model-index;
-    in property <bool> whisper-installed;
-    in-out property <bool> generate-missing;
-    callback choose-videos();
-    callback download-ffmpeg();
-    in property <bool> can-download-ffmpeg;
-    in-out property <bool> only-missing;
-    in-out property <bool> watch;
-    in property <bool> menu-installed;
-    callback play(int);
-    callback reveal(int);
-    callback save-settings();
-
-    VerticalLayout {
-        TabWidget {
-            vertical-stretch: 1;
-
-            Tab {
-                title: @tr("Subtitles");
-                VerticalBox {
-                    HorizontalLayout {
-                        spacing: 8px;
-                        Button {
-                            text: @tr("Choose folder…");
-                            enabled: !root.busy;
-                            clicked => { root.choose-folder(); }
-                        }
-                        Button {
-                            text: @tr("Open video…");
-                            enabled: !root.busy;
-                            clicked => { root.choose-videos(); }
-                        }
-                        Button {
-                            text: @tr("Search all");
-                            enabled: !root.busy && root.files.length > 0;
-                            clicked => { root.search-all(); }
-                        }
-                        Button {
-                            text: @tr("Download best for all");
-                            primary: true;
-                            enabled: !root.busy && root.files.length > 0;
-                            clicked => { root.download-all(); }
-                        }
-                        Button {
-                            text: @tr("Stop");
-                            enabled: root.busy;
-                            clicked => { root.stop(); }
-                        }
-                        Rectangle { horizontal-stretch: 1; }
-                        CheckBox {
-                            text: @tr("Watch folder");
-                            enabled: root.folder != "";
-                            checked <=> root.watch;
-                            toggled => { root.toggle-watch(self.checked); }
-                        }
-                        CheckBox {
-                            text: @tr("Include subfolders");
-                            enabled: !root.busy;
-                            checked <=> root.recursive;
-                            toggled => {
-                                root.save-settings();
-                                root.rescan();
-                            }
-                        }
-                    }
-
-                    HorizontalLayout {
-                        spacing: 12px;
-                        Text {
-                            text: root.folder == "" ? @tr("No folder chosen") : root.folder;
-                            overflow: elide;
-                            horizontal-stretch: 1;
-                            opacity: 0.8;
-                        }
-                        Text {
-                            text: @tr("Languages: {}", root.languages);
-                            opacity: 0.8;
-                        }
-                    }
-
-                    HorizontalLayout {
-                        spacing: 10px;
-                        vertical-stretch: 1;
-
-                        VerticalLayout {
-                            horizontal-stretch: 6;
-                            spacing: 8px;
-                            Rectangle {
-                                vertical-stretch: 1;
-                                border-width: 1px;
-                                border-color: Palette.border;
-                                border-radius: 4px;
-                                clip: true;
-                                if root.files.length == 0: Placeholder {
-                                    text: @tr("Choose a folder with videos, or drop one here, to start.");
-                                }
-                                ListView {
-                                    for row[i] in root.files: FileItem {
-                                        item: row;
-                                        height: root.only-missing && row.has-wanted ? 0px : 46px;
-                                        even: mod(i, 2) == 0;
-                                        selected: i == root.selected-file;
-                                        clicked => {
-                                            root.selected-file = i;
-                                            root.selected-candidate = -1;
-                                            root.file-selected(i);
-                                        }
-                                    }
-                                }
-                            }
-                            HorizontalLayout {
-                                spacing: 8px;
-                                Button {
-                                    text: @tr("Play");
-                                    enabled: root.selected-file >= 0;
-                                    clicked => { root.play(root.selected-file); }
-                                }
-                                Button {
-                                    text: @tr("Show in folder");
-                                    enabled: root.selected-file >= 0;
-                                    clicked => { root.reveal(root.selected-file); }
-                                }
-                                Rectangle { horizontal-stretch: 1; }
-                                CheckBox {
-                                    text: @tr("Only missing");
-                                    checked <=> root.only-missing;
-                                }
-                            }
-                        }
-
-                        VerticalLayout {
-                            horizontal-stretch: 5;
-                            spacing: 8px;
-                            HorizontalLayout {
-                                spacing: 8px;
-                                search-as-edit := LineEdit {
-                                    enabled: !root.busy && root.selected-file >= 0;
-                                    placeholder-text: @tr("Search as… (e.g. The Office US S03E07)");
-                                    accepted(text) => { root.search-as(root.selected-file, text); }
-                                }
-                                Button {
-                                    text: @tr("Search");
-                                    enabled: !root.busy && root.selected-file >= 0;
-                                    clicked => { root.search-as(root.selected-file, search-as-edit.text); }
-                                }
-                            }
-                            Rectangle {
-                                vertical-stretch: 1;
-                                border-width: 1px;
-                                border-color: Palette.border;
-                                border-radius: 4px;
-                                clip: true;
-                                if root.candidates-loading: Placeholder {
-                                    text: @tr("Searching…");
-                                }
-                                if !root.candidates-loading && root.candidates.length == 0: Placeholder {
-                                    text: root.selected-file < 0 ? @tr("Select a video to see its subtitles.")
-                                        : root.files[root.selected-file].state == 0 ? @tr("Not searched yet.")
-                                        : @tr("No subtitles found for this video.");
-                                }
-                                ListView {
-                                    for row[i] in root.candidates: CandidateItem {
-                                        item: row;
-                                        even: mod(i, 2) == 0;
-                                        selected: i == root.selected-candidate;
-                                        clicked => { root.selected-candidate = i; }
-                                        double-clicked => {
-                                            root.selected-candidate = i;
-                                            if !root.busy { root.download-candidate(i); }
-                                        }
-                                    }
-                                }
-                            }
-                            HorizontalLayout {
-                                spacing: 8px;
-                                alignment: end;
-                                Button {
-                                    text: @tr("Write from audio");
-                                    enabled: !root.busy && root.selected-file >= 0;
-                                    clicked => { root.generate(root.selected-file); }
-                                }
-                                Button {
-                                    text: @tr("Search again");
-                                    enabled: !root.busy && root.selected-file >= 0;
-                                    clicked => { root.search-file(root.selected-file); }
-                                }
-                                Button {
-                                    text: @tr("Download selected");
-                                    primary: true;
-                                    enabled: !root.busy && root.selected-candidate >= 0;
-                                    clicked => { root.download-candidate(root.selected-candidate); }
-                                }
-                            }
-                        }
-                    }
-
-                    HorizontalLayout {
-                        spacing: 6px;
-                        property <bool> can-time: !root.busy && root.selected-file >= 0 && root.files[root.selected-file].existing != "";
-                        Text {
-                            text: @tr("Timing:");
-                            vertical-alignment: center;
-                        }
-                        Button {
-                            text: @tr("Sync to audio");
-                            enabled: parent.can-time;
-                            clicked => { root.sync-audio(root.selected-file); }
-                        }
-                        Button {
-                            text: @tr("Sync to subtitle…");
-                            enabled: parent.can-time;
-                            clicked => { root.sync-reference(root.selected-file); }
-                        }
-                        Button {
-                            text: @tr("Restore previous");
-                            enabled: parent.can-time;
-                            clicked => { root.restore(root.selected-file); }
-                        }
-                        Rectangle { horizontal-stretch: 1; }
-                        for step in [-1000, -100, 100, 1000]: Button {
-                            text: (step > 0 ? "+" : "−") + abs(step / 1000) + " s";
-                            enabled: parent.can-time;
-                            clicked => { root.shift(root.selected-file, step); }
-                        }
-                    }
-                }
-            }
-
-            Tab {
-                title: @tr("Settings");
-                ScrollView {
-                    VerticalBox {
-                        alignment: start;
-                        GroupBox {
-                            title: @tr("Subtitles");
-                            VerticalLayout {
-                                spacing: 8px;
-                                Text {
-                                    text: @tr("Languages, most wanted first (for example: tr, en)");
-                                }
-                                LineEdit {
-                                    text <=> root.languages;
-                                    placeholder-text: "tr, en";
-                                }
-                                CheckBox {
-                                    text: @tr("Skip videos that already have a subtitle in the first language");
-                                    checked <=> root.skip-existing;
-                                }
-                            }
-                        }
-                        GroupBox {
-                            title: @tr("Timing");
-                            VerticalLayout {
-                                spacing: 8px;
-                                CheckBox {
-                                    text: @tr("Sync every downloaded subtitle to the video's audio");
-                                    checked <=> root.auto-sync;
-                                }
-                                Text {
-                                    text: root.ffmpeg-found == "" ? @tr("ffmpeg not found: needed to sync to the audio and to read tracks inside videos.") : @tr("ffmpeg: {}", root.ffmpeg-found);
-                                    wrap: word-wrap;
-                                    opacity: 0.8;
-                                }
-                                LineEdit {
-                                    text <=> root.ffmpeg-path;
-                                    placeholder-text: @tr("ffmpeg path (optional)");
-                                }
-                                if root.ffmpeg-found == "" && root.can-download-ffmpeg: HorizontalLayout {
-                                    alignment: start;
-                                    Button {
-                                        text: @tr("Download ffmpeg (about 110 MB)");
-                                        enabled: !root.busy;
-                                        clicked => { root.download-ffmpeg(); }
-                                    }
-                                }
-                                if root.ffmpeg-found == "" && !root.can-download-ffmpeg: Text {
-                                    text: @tr("Install it with your package manager, for example: sudo apt install ffmpeg");
-                                    opacity: 0.8;
-                                }
-                            }
-                        }
-                        GroupBox {
-                            title: @tr("Speech (Whisper)");
-                            VerticalLayout {
-                                spacing: 8px;
-                                Text {
-                                    text: @tr("Writes a subtitle from the video's audio when no source has one. Runs on this computer; the model is downloaded once. Into English it can translate any language; other languages are written as spoken.");
-                                    wrap: word-wrap;
-                                }
-                                HorizontalLayout {
-                                    spacing: 8px;
-                                    ComboBox {
-                                        model: root.whisper-models;
-                                        current-index <=> root.whisper-model-index;
-                                        selected => { root.whisper-model-changed(self.current-index); }
-                                    }
-                                    Button {
-                                        text: root.whisper-installed ? @tr("Downloaded") : @tr("Download");
-                                        enabled: !root.whisper-installed && !root.busy;
-                                        clicked => { root.download-model(); }
-                                    }
-                                    Rectangle { horizontal-stretch: 1; }
-                                }
-                                CheckBox {
-                                    text: @tr("When no source has a subtitle, write one from the audio (slow)");
-                                    checked <=> root.generate-missing;
-                                }
-                            }
-                        }
-                        GroupBox {
-                            title: @tr("Sources");
-                            VerticalLayout {
-                                spacing: 8px;
-                                HorizontalLayout {
-                                    spacing: 16px;
-                                    CheckBox {
-                                        text: "OpenSubtitles";
-                                        checked <=> root.use-opensubtitles;
-                                    }
-                                    CheckBox {
-                                        text: "SubDL";
-                                        checked <=> root.use-subdl;
-                                    }
-                                    CheckBox {
-                                        text: @tr("Addic7ed (TV series)");
-                                        checked <=> root.use-addic7ed;
-                                    }
-                                }
-                                LineEdit {
-                                    text <=> root.subdl-api-key;
-                                    placeholder-text: root.has-subdl-key ? @tr("SubDL API key (optional, built-in key is used)") : @tr("SubDL API key (SubDL is skipped without one)");
-                                }
-                                HorizontalLayout {
-                                    alignment: start;
-                                    Button {
-                                        text: @tr("Clear search cache");
-                                        clicked => { root.clear-cache(); }
-                                    }
-                                }
-                            }
-                        }
-                        GroupBox {
-                            title: @tr("File manager");
-                            VerticalLayout {
-                                spacing: 8px;
-                                Text {
-                                    text: @tr("Right-click a folder or a video and choose \"Find subtitles with SubMagician\". On Linux it also adds SubMagician to \"Open with\", so folders can be dropped on its icon.");
-                                    wrap: word-wrap;
-                                }
-                                HorizontalLayout {
-                                    alignment: start;
-                                    spacing: 8px;
-                                    Button {
-                                        text: root.menu-installed ? @tr("Remove from the menu") : @tr("Add to the menu");
-                                        clicked => { root.set-menu(!root.menu-installed); }
-                                    }
-                                }
-                            }
-                        }
-                        GroupBox {
-                            title: "OpenSubtitles.com";
-                            VerticalLayout {
-                                spacing: 8px;
-                                Text {
-                                    text: @tr("Optional. Logging in raises the daily download limit.");
-                                    wrap: word-wrap;
-                                }
-                                LineEdit {
-                                    text <=> root.os-username;
-                                    placeholder-text: @tr("User name");
-                                }
-                                LineEdit {
-                                    text <=> root.os-password;
-                                    input-type: password;
-                                    placeholder-text: @tr("Password");
-                                }
-                                LineEdit {
-                                    text <=> root.os-api-key;
-                                    placeholder-text: root.has-builtin-key ? @tr("API key (optional, built-in key is used)") : @tr("API key (required: this build has no built-in key)");
-                                }
-                            }
-                        }
-                        HorizontalLayout {
-                            alignment: end;
-                            Button {
-                                text: @tr("Save");
-                                primary: true;
-                                clicked => { root.save-settings(); }
-                            }
-                        }
-                    }
-                }
-            }
-
-            Tab {
-                title: @tr("About");
-                VerticalBox {
-                    alignment: start;
-                    Text {
-                        text: "SubMagician " + root.version;
-                        font-size: 20px;
-                        font-weight: 700;
-                    }
-                    Text {
-                        text: @tr("Finds subtitles for your videos, picks the one made for your file, fixes its encoding and timing, and saves it next to the video.");
-                        wrap: word-wrap;
-                    }
-                    Text {
-                        text: @tr("Subtitles from OpenSubtitles.com, SubDL and Addic7ed (through Gestdown).");
-                        opacity: 0.7;
-                    }
-                    AboutSlint {
-                        max-height: 200px;
-                    }
-                }
-            }
-        }
-
+    HorizontalLayout {
+        // Sidebar
         Rectangle {
-            height: 30px;
-            background: Palette.alternate-background;
-            HorizontalLayout {
-                padding-left: 10px;
-                padding-right: 10px;
-                spacing: 10px;
-                Text {
-                    text: Texts.status(root.status-kind, root.status-a, root.status-b, root.status-detail);
-                    vertical-alignment: center;
-                    overflow: elide;
-                    horizontal-stretch: 1;
+            width: 220px;
+            background: Theme.sidebar;
+            VerticalLayout {
+                padding: 12px;
+                spacing: 4px;
+                HorizontalLayout {
+                    padding: 8px;
+                    padding-bottom: 20px;
+                    spacing: 10px;
+                    Image {
+                        source: Icons.logo;
+                        width: 28px;
+                        height: 28px;
+                    }
+                    Text {
+                        text: "SubMagician";
+                        font-size: 18px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
                 }
-                if root.busy: ProgressIndicator {
-                    width: 160px;
-                    height: 6px;
-                    y: (parent.height - self.height) / 2;
-                    progress: root.progress;
-                    indeterminate: root.progress <= 0;
+                NavItem {
+                    icon: Icons.library;
+                    label: @tr("Library");
+                    selected: AppState.page == Page.library;
+                    clicked => { AppState.page = Page.library; }
+                }
+                NavItem {
+                    icon: Icons.plug;
+                    label: @tr("Player plugins");
+                    selected: AppState.page == Page.players;
+                    clicked => { AppState.page = Page.players; }
+                }
+                Rectangle { vertical-stretch: 1; }
+                NavItem {
+                    icon: Icons.settings;
+                    label: @tr("Settings");
+                    selected: AppState.page == Page.settings;
+                    badge: AppState.update-state == 2 || AppState.update-state == 3;
+                    clicked => { AppState.page = Page.settings; }
                 }
             }
         }
+
+        // Content
+        VerticalLayout {
+            horizontal-stretch: 1;
+
+            if update-banner: Rectangle {
+                background: Palette.accent-background.transparentize(0.85);
+                HorizontalLayout {
+                    padding-left: 24px;
+                    padding-right: 16px;
+                    padding-top: 8px;
+                    padding-bottom: 8px;
+                    spacing: 10px;
+                    VerticalLayout {
+                        alignment: center;
+                        Glyph { source: Icons.update; color: Palette.accent-background; }
+                    }
+                    Text {
+                        text: AppState.update-state == 4 ? @tr("Downloading SubMagician {}…", AppState.update-version)
+                            : @tr("SubMagician {} is available.", AppState.update-version);
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                        overflow: elide;
+                    }
+                    if AppState.update-state == 2: Button {
+                        text: @tr("Restart and update");
+                        primary: true;
+                        clicked => { AppState.install-update(); }
+                    }
+                    if AppState.update-state == 3: Button {
+                        text: @tr("Download");
+                        primary: true;
+                        clicked => { AppState.open-release(); }
+                    }
+                    Button {
+                        text: @tr("Release notes");
+                        clicked => { AppState.open-release(); }
+                    }
+                    if AppState.update-state != 4: Button {
+                        text: @tr("Later");
+                        clicked => { AppState.update-dismissed = true; }
+                    }
+                }
+            }
+
+            if AppState.page == Page.library: LibraryPage {
+                vertical-stretch: 1;
+            }
+            if AppState.page == Page.players: PlayersPage {
+                vertical-stretch: 1;
+            }
+            if AppState.page == Page.settings: SettingsPage {
+                vertical-stretch: 1;
+            }
+
+            // Status bar
+            Rectangle {
+                height: 32px;
+                background: Theme.sidebar;
+                HorizontalLayout {
+                    padding-left: 16px;
+                    padding-right: 16px;
+                    spacing: 10px;
+                    VerticalLayout {
+                        alignment: center;
+                        Rectangle {
+                            width: 8px;
+                            height: 8px;
+                            border-radius: 4px;
+                            background: Theme.tone-color(Texts.status-tone(AppState.status-kind));
+                        }
+                    }
+                    Text {
+                        text: Texts.status(AppState.status-kind, AppState.status-a, AppState.status-b, AppState.status-detail);
+                        vertical-alignment: center;
+                        overflow: elide;
+                        horizontal-stretch: 1;
+                        font-size: 12px;
+                    }
+                    if AppState.busy: ProgressIndicator {
+                        width: 180px;
+                        height: 6px;
+                        y: (parent.height - self.height) / 2;
+                        progress: AppState.progress;
+                        indeterminate: AppState.progress <= 0;
+                    }
+                }
+            }
+        }
+    }
+
+    if AppState.whats-new-visible: WhatsNewDialog {
+        width: root.width;
+        height: root.height;
+    }
+    if AppState.report-visible: ReportDialog {
+        width: root.width;
+        height: root.height;
     }
 }

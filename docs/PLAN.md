@@ -99,11 +99,20 @@ APIs where a site has one, scraping only where it has none. Every source sits be
 - Later: use a short transcript to check which candidate matches the audio; Whisper segments as
   a sync reference for music-heavy films; GPU builds (CUDA/Vulkan/Metal).
 
-### Phase 6 — Packaging (Windows, Linux)
-- Windows: installer (MSI or Inno Setup), ffmpeg bundled, icon/version resources.
-- Linux: AppImage and .deb (Flatpak later).
-- Release workflow building with the application keys from repository secrets.
-- Password to the OS keyring; update check (opt-in).
+### Phase 6 — Packaging (Windows, Linux) and polish
+- Windows: Inno Setup installer per user (no admin), ffmpeg bundled, icon/version resources;
+  portable zip.
+- Linux: AppImage (`--cli` runs the tool) and .deb (Flatpak later).
+- Release workflow: version without a tag on main → build, smoke-test, publish with the keys from
+  the repository secrets; notes from `changelog/en.md`.
+- In-app updates (installer, AppImage), "What's new" after an update.
+- Logs (errors always, detailed on request) and "Report a problem" (GitHub issue / e-mail).
+- New interface: sidebar, file cards, details panel, settings in cards (About, Logs, Updates).
+- Player plugins: mpv/mpv.net script and VLC extension running `submagician-cli --player`,
+  installed from the app.
+- Fast sync: quick look at windows across the film, parallel full read, speech cache; subtitles
+  inside videos taken out and synced; heavy jobs in a worker process with per-video progress.
+- Later: password to the OS keyring; Flatpak; signed Windows installer.
 
 ### Phase 7 — macOS
 - .app bundle, dmg, signing/notarization; portal-free folder dialog check.
