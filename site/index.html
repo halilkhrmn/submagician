@@ -7,8 +7,15 @@
 <meta name="description" content="SubMagician finds the subtitle made for your video, fixes its text and syncs it to the audio in seconds. Free and open source, for Windows and Linux.">
 <meta property="og:title" content="SubMagician">
 <meta property="og:description" content="The right subtitle for every video. Found, fixed and synced in seconds.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://halilkhrmn.github.io/submagician/">
 <meta property="og:image" content="https://halilkhrmn.github.io/submagician/screenshots/library.png">
-<meta name="theme-color" content="#6d28d9">
+<meta property="og:image:width" content="1240">
+<meta property="og:image:height" content="780">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f0d14">
 <link rel="icon" href="logo.svg" type="image/svg+xml">
 <link rel="icon" href="favicon.ico" sizes="any">
 <style>
@@ -27,7 +34,7 @@
       --fg: #f3f1f7;
       --muted: #a29cb0;
       --line: #241f2e;
-      --accent: #8b5cf6;
+      --accent: #7c3aed;
       --shadow: 0 30px 80px -30px rgba(139, 92, 246, 0.35);
     }
   }
@@ -75,6 +82,8 @@
   }
   .button:hover { transform: translateY(-1px); box-shadow: 0 14px 34px -12px var(--accent); }
   .button svg { width: 18px; height: 18px; }
+  .button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+  @media (prefers-reduced-motion: reduce) { .button { transition: none; } .button:hover { transform: none; } }
   .meta { font-size: 13px; color: var(--muted); min-height: 1.6em; }
   .others { font-size: 14px; color: var(--muted); }
   .others a { color: var(--muted); }
@@ -105,13 +114,16 @@
   }
   footer a { color: var(--muted); text-decoration: none; }
   footer a:hover { color: var(--fg); }
-  footer .links a { margin-left: 18px; }
+  footer .links a { margin-left: 18px; white-space: nowrap; }
 
   @media (max-width: 760px) {
     .hero { padding: 40px 0 24px; }
     .features { grid-template-columns: 1fr; gap: 24px; padding: 64px 0 48px; }
     nav .links a.hide-sm { display: none; }
     footer .links a { margin: 0 18px 0 0; }
+  }
+  @media (max-width: 359px) {
+    .button { padding: 14px 20px; font-size: 16px; white-space: nowrap; }
   }
 </style>
 </head>
@@ -126,8 +138,9 @@
   </div>
 </nav>
 
+<main>
 <header class="hero">
-  <img class="logo" src="logo.svg" alt="SubMagician logo">
+  <img class="logo" src="logo.svg" alt="">
   <h1>The right subtitle for every video.</h1>
   <p class="lead">Found, fixed and synced to the audio in seconds. Free and open source.</p>
   <div class="cta">
@@ -145,7 +158,7 @@
   <img src="screenshots/library.png" width="1240" height="780" alt="SubMagician: a folder of episodes, each with its subtitle saved">
 </figure>
 
-<section class="features" id="features">
+<section class="features" id="features" aria-label="Features">
   <div>
     <h2>Picks the right one</h2>
     <p>Every subtitle from OpenSubtitles, SubDL and Addic7ed is scored against your exact file, not just its name.</p>
@@ -159,6 +172,7 @@
     <p>One click adds SubMagician to mpv and VLC. Press a key and the subtitle appears.</p>
   </div>
 </section>
+</main>
 
 <footer>
   <span>SubMagician · AGPL-3.0</span>
@@ -176,10 +190,15 @@
 (async function () {
   var repo = "halilkhrmn/submagician";
   var ua = navigator.userAgent;
+  var uad = navigator.userAgentData;
+  var arm = /aarch64|arm64|armv\d/i.test(ua);
   var os = /Windows/.test(ua) ? "windows"
-    : /Android|iPhone|iPad|iPod/.test(ua) ? "mobile"
+    : /Android|iPhone|iPad|iPod/.test(ua) || (uad && uad.mobile) ? "mobile"
+    // iPadOS reports itself as a Mac; real Macs have no touch screen.
+    : /Macintosh/.test(ua) && navigator.maxTouchPoints > 1 ? "mobile"
     : /Macintosh|Mac OS X/.test(ua) ? "mac"
-    : /Linux|X11|CrOS/.test(ua) ? "linux" : "other";
+    // The Linux builds are x86_64 only.
+    : /Linux|CrOS/.test(ua) && !arm ? "linux" : "other";
   var button = document.getElementById("download");
   var label = document.getElementById("download-label");
   var meta = document.getElementById("meta");
