@@ -1,7 +1,8 @@
-import { Button, LineEdit, Switch, ComboBox, ScrollView, Palette } from "std-widgets.slint";
+import { Button, LineEdit, Switch, CheckBox, ComboBox, ScrollView, Palette } from "std-widgets.slint";
 import { Theme, Icons } from "theme.slint";
 import { AppState } from "state.slint";
-import { Card, PageHeader, SettingRow, Glyph, Note } from "components.slint";
+import { Card, SettingRow, Glyph, Note } from "components.slint";
+import { PlayersSection } from "players.slint";
 
 component Field inherits VerticalLayout {
     in property <string> label;
@@ -20,19 +21,26 @@ component Divider inherits Rectangle {
 }
 
 export component SettingsPage inherits VerticalLayout {
-    padding: Theme.page-padding;
-    spacing: 16px;
-
-    PageHeader {
-        title: @tr("Settings");
-        subtitle: @tr("Changes are saved as you make them.");
-    }
+    padding-top: 4px;
+    padding-bottom: 10px;
 
     ScrollView {
+        // A readable column in the middle of a wide window.
+        HorizontalLayout {
+        alignment: center;
         VerticalLayout {
-            spacing: 14px;
-            padding-right: 12px;
+            max-width: 760px;
+            preferred-width: 760px;
+            spacing: 12px;
+            padding-left: Theme.page-padding;
+            padding-right: Theme.page-padding;
             alignment: start;
+
+            Text {
+                text: @tr("Changes are saved as you make them.");
+                font-size: 12px;
+                color: Theme.muted;
+            }
 
             Card {
                 title: @tr("Subtitles");
@@ -53,6 +61,33 @@ export component SettingsPage inherits VerticalLayout {
                         accessible-label: @tr("Skip videos that already have one");
                         checked <=> AppState.skip-existing;
                         toggled => { AppState.settings-changed(); }
+                    }
+                }
+            }
+
+            Card {
+                title: @tr("Library");
+                icon: Icons.library;
+                has-icon: true;
+                SettingRow {
+                    title: @tr("Look in subfolders");
+                    description: @tr("A folder's videos include the ones in its subfolders (seasons, for example).");
+                    Switch {
+                        accessible-label: @tr("Look in subfolders");
+                        checked <=> AppState.recursive;
+                        toggled => {
+                            AppState.settings-changed();
+                            AppState.rescan();
+                        }
+                    }
+                }
+                SettingRow {
+                    title: @tr("Watch the open folder for new videos");
+                    description: @tr("A video that appears there while SubMagician is open gets its subtitle by itself.");
+                    Switch {
+                        accessible-label: @tr("Watch the open folder for new videos");
+                        checked <=> AppState.watch;
+                        toggled => { AppState.toggle-watch(self.checked); }
                     }
                 }
             }
@@ -225,17 +260,40 @@ export component SettingsPage inherits VerticalLayout {
                 }
             }
 
+            PlayersSection { }
+
             Card {
-                title: @tr("File manager");
+                title: @tr("Right-click menu");
                 icon: Icons.folder;
                 has-icon: true;
                 SettingRow {
-                    title: @tr("\"Find subtitles with SubMagician\" in the right-click menu");
-                    description: @tr("For folders and videos. On Linux SubMagician is also added to \"Open with\".");
+                    title: @tr("SubMagician in the file manager's right-click menu");
+                    description: @tr("For folders and videos, in Explorer, Files, Dolphin, Nemo and Caja. On Linux SubMagician is also added to \"Open with\".");
                     Button {
                         text: AppState.menu-installed ? @tr("Remove") : @tr("Add");
+                        primary: !AppState.menu-installed;
                         clicked => { AppState.set-menu(!AppState.menu-installed); }
                     }
+                }
+                Text {
+                    text: @tr("What the menu offers:");
+                    font-size: 12px;
+                    color: Theme.muted;
+                }
+                CheckBox {
+                    text: @tr("Open in SubMagician");
+                    checked <=> AppState.menu-open;
+                    toggled => { AppState.menu-entries-changed(); }
+                }
+                CheckBox {
+                    text: @tr("Get subtitles in my languages (and sync them)");
+                    checked <=> AppState.menu-get;
+                    toggled => { AppState.menu-entries-changed(); }
+                }
+                CheckBox {
+                    text: @tr("Sync the subtitle to the audio");
+                    checked <=> AppState.menu-sync;
+                    toggled => { AppState.menu-entries-changed(); }
                 }
             }
 
@@ -382,6 +440,7 @@ export component SettingsPage inherits VerticalLayout {
                     }
                 }
             }
+        }
         }
     }
 }

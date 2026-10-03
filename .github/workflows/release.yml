@@ -20,6 +20,8 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # Also in .cargo/config.toml: whisper.cpp for any x86-64 CPU since 2013, not the runner's.
+  GGML_NATIVE: "OFF"
   SUBMAGICIAN_OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
   SUBMAGICIAN_SUBDL_API_KEY: ${{ secrets.SUBDL_API_KEY }}
 
@@ -72,6 +74,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          # v1: caches from before GGML_NATIVE=OFF hold a whisper.cpp built for the runner's CPU.
+          prefix-key: v1-rust
       - name: Install Inno Setup (if the runner lacks it)
         shell: pwsh
         run: |
@@ -79,6 +84,12 @@ jobs:
       - name: Build the installer and the portable zip
         shell: pwsh
         run: ./tools/build-installer.ps1
+      - name: Check that whisper.cpp was built for any CPU
+        shell: bash
+        run: |
+          caches=$(ls target/release/build/whisper-rs-sys-*/out/build/CMakeCache.txt)
+          grep -H "GGML_NATIVE:BOOL" $caches
+          ! grep -q "GGML_NATIVE:BOOL=ON" $caches
       - uses: actions/upload-artifact@v4
         with:
           name: windows
@@ -95,6 +106,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          # v1: caches from before GGML_NATIVE=OFF hold a whisper.cpp built for the runner's CPU.
+          prefix-key: v1-rust
       - name: Build dependencies and packaging tools
         run: |
           sudo apt-get update
@@ -102,6 +116,12 @@ jobs:
           cargo install --locked cargo-deb
       - name: Build the .deb and the AppImage
         run: ./tools/build-linux-packages.sh
+      - name: Check that whisper.cpp was built for any CPU
+        shell: bash
+        run: |
+          caches=$(ls target/release/build/whisper-rs-sys-*/out/build/CMakeCache.txt)
+          grep -H "GGML_NATIVE:BOOL" $caches
+          ! grep -q "GGML_NATIVE:BOOL=ON" $caches
       - uses: actions/upload-artifact@v4
         with:
           name: linux

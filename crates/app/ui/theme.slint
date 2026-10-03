@@ -36,14 +36,62 @@ export global Icons {
     out property <image> heart: @image-url("icons/heart.svg");
     out property <image> code: @image-url("icons/code.svg");
     out property <image> done: @image-url("icons/done.svg");
+    out property <image> back: @image-url("icons/back.svg");
+    out property <image> more: @image-url("icons/more.svg");
+    out property <image> sad: @image-url("icons/sad.svg");
+    out property <image> question: @image-url("icons/question.svg");
     out property <image> logo: @image-url("../assets/icon.svg");
+}
+
+// A flag for each subtitle language (flags/README.md). English shows the UK flag, Portuguese
+// Portugal's and Brazilian Portuguese Brazil's; a language without one shows its code.
+export global Flags {
+    public pure function has(code: string) -> bool {
+        return code == "tr" || code == "en" || code == "de" || code == "fr" || code == "es" || code == "it"
+            || code == "pt-pt" || code == "pt" || code == "pt-br" || code == "nl" || code == "pl" || code == "cs"
+            || code == "hu" || code == "ro" || code == "bg" || code == "el" || code == "ru" || code == "uk"
+            || code == "ar" || code == "fa" || code == "he" || code == "az" || code == "sv" || code == "da"
+            || code == "no" || code == "fi" || code == "zh-cn" || code == "zh-tw" || code == "ja" || code == "ko";
+    }
+    public pure function of(code: string) -> image {
+        if code == "tr" { return @image-url("flags/tr.svg"); }
+        if code == "en" { return @image-url("flags/gb.svg"); }
+        if code == "de" { return @image-url("flags/de.svg"); }
+        if code == "fr" { return @image-url("flags/fr.svg"); }
+        if code == "es" { return @image-url("flags/es.svg"); }
+        if code == "it" { return @image-url("flags/it.svg"); }
+        if code == "pt-pt" || code == "pt" { return @image-url("flags/pt.svg"); }
+        if code == "pt-br" { return @image-url("flags/br.svg"); }
+        if code == "nl" { return @image-url("flags/nl.svg"); }
+        if code == "pl" { return @image-url("flags/pl.svg"); }
+        if code == "cs" { return @image-url("flags/cz.svg"); }
+        if code == "hu" { return @image-url("flags/hu.svg"); }
+        if code == "ro" { return @image-url("flags/ro.svg"); }
+        if code == "bg" { return @image-url("flags/bg.svg"); }
+        if code == "el" { return @image-url("flags/gr.svg"); }
+        if code == "ru" { return @image-url("flags/ru.svg"); }
+        if code == "uk" { return @image-url("flags/ua.svg"); }
+        if code == "ar" { return @image-url("flags/sa.svg"); }
+        if code == "fa" { return @image-url("flags/ir.svg"); }
+        if code == "he" { return @image-url("flags/il.svg"); }
+        if code == "az" { return @image-url("flags/az.svg"); }
+        if code == "sv" { return @image-url("flags/se.svg"); }
+        if code == "da" { return @image-url("flags/dk.svg"); }
+        if code == "no" { return @image-url("flags/no.svg"); }
+        if code == "fi" { return @image-url("flags/fi.svg"); }
+        if code == "zh-cn" { return @image-url("flags/cn.svg"); }
+        if code == "zh-tw" { return @image-url("flags/tw.svg"); }
+        if code == "ja" { return @image-url("flags/jp.svg"); }
+        if code == "ko" { return @image-url("flags/kr.svg"); }
+        return @image-url("");
+    }
 }
 
 // Tones: 0 idle, 1 busy, 2 ok, 3 warning, 4 error.
 export global Theme {
     out property <bool> dark: Palette.color-scheme == ColorScheme.dark;
     out property <length> radius: 8px;
-    out property <length> page-padding: 24px;
+    out property <length> page-padding: 16px;
     out property <color> muted: Palette.foreground.transparentize(0.4);
     out property <color> card: dark ? #2b2b2b : #ffffff;
     out property <color> card-hover: dark ? #323232 : #f5f5f5;

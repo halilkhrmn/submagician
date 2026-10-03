@@ -156,3 +156,116 @@ export component ReportDialog inherits Rectangle {
         }
     }
 }
+
+// A small modal box with an icon, a title, a message and buttons (the children).
+component Prompt inherits Rectangle {
+    in property <image> icon;
+    in property <color> tone: Theme.brand;
+    in property <string> title;
+    in property <string> message;
+    in property <string> detail;
+    background: #00000080;
+    TouchArea { }
+
+    Rectangle {
+        width: min(480px, root.width - 48px);
+        height: box.preferred-height;
+        border-radius: 10px;
+        background: Theme.content;
+        border-width: 1px;
+        border-color: Theme.border;
+        TouchArea { }
+
+        box := VerticalLayout {
+            padding: 22px;
+            spacing: 12px;
+            HorizontalLayout {
+                spacing: 12px;
+                VerticalLayout {
+                    alignment: start;
+                    Rectangle {
+                        width: 40px;
+                        height: 40px;
+                        border-radius: 20px;
+                        background: root.tone.transparentize(0.85);
+                        Glyph { source: root.icon; size: 22px; color: root.tone; }
+                    }
+                }
+                VerticalLayout {
+                    spacing: 6px;
+                    horizontal-stretch: 1;
+                    Text {
+                        text: root.title;
+                        font-size: 17px;
+                        font-weight: 700;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: root.message;
+                        wrap: word-wrap;
+                    }
+                    if root.detail != "": Text {
+                        text: root.detail;
+                        font-size: 11px;
+                        color: Theme.muted;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: end;
+                @children
+            }
+        }
+    }
+}
+
+// "Write from speech" (or the setting to write subtitles from the audio) needs a speech model that is
+// not downloaded yet: ask here instead of sending the user to Settings.
+export component ModelPromptDialog inherits Prompt {
+    icon: Icons.mic;
+    title: @tr("Download the speech model?");
+    message: @tr("Writing a subtitle from the audio needs Whisper's speech model, {}. It is downloaded once and runs on this computer. The model can be changed in Settings → Speech.", AppState.model-prompt-name);
+    Button {
+        text: @tr("Not now");
+        clicked => { AppState.model-prompt-visible = false; }
+    }
+    Button {
+        text: @tr("Download and continue");
+        icon: Icons.download;
+        colorize-icon: true;
+        primary: true;
+        clicked => {
+            AppState.model-prompt-visible = false;
+            AppState.model-prompt-accept();
+        }
+    }
+}
+
+// The background process died: say it plainly and offer to report it.
+export component CrashDialog inherits Prompt {
+    icon: Icons.sad;
+    tone: Theme.error;
+    title: @tr("Sorry, something went wrong");
+    message: AppState.crash-cpu
+        ? @tr("SubMagician stopped because this computer's processor does not support an instruction the task needs. Other features keep working. Please tell us, so we can make it work on your computer.")
+        : @tr("SubMagician's background task stopped unexpectedly. The app is fine and the task can be tried again. Telling us about it helps fix it; the report shows you everything before anything is sent.");
+    detail: AppState.crash-detail;
+    Button {
+        text: @tr("Close");
+        clicked => { AppState.crash-visible = false; }
+    }
+    Button {
+        text: @tr("Report it");
+        icon: Icons.bug;
+        colorize-icon: true;
+        primary: true;
+        clicked => {
+            AppState.crash-visible = false;
+            AppState.report-problem();
+            AppState.report-note = AppState.crash-cpu ? "Crash: the processor lacks an instruction (" + AppState.crash-detail + ")"
+                : "Crash of the background task (" + AppState.crash-detail + ")";
+        }
+    }
+}

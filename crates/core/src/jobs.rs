@@ -245,11 +245,26 @@ pub fn run_in_worker(command: &[String], job: &Job, cancel: Arc<AtomicBool>, pro
     let tail = stderr_thread.join().unwrap_or_default();
     match result {
         Some(r) => r,
-        None => Err(Error::Other(format!(
-            "the worker stopped unexpectedly ({status}){}",
-            tail.back().map(|l| format!(": {l}")).unwrap_or_default()
-        ))),
+        None => {
+            // The details stay in the log; the message is for people.
+            log::error!("the worker stopped unexpectedly ({status}); last lines: {tail:?}");
+            Err(crash_error(&status))
+        }
     }
+}
+
+/// The error for a worker that died without an answer.
+fn crash_error(status: &std::process::ExitStatus) -> Error {
+    #[cfg(windows)]
+    let illegal = status.code().map(|c| c as u32) == Some(0xC000_001D);
+    #[cfg(unix)]
+    let illegal = {
+        use std::os::unix::process::ExitStatusExt;
+        status.signal() == Some(4)
+    };
+    #[cfg(not(any(windows, unix)))]
+    let illegal = false;
+    Error::Crashed { cpu: illegal, detail: status.to_string() }
 }
 
 /// Runs `job` in a worker process when the command-line tool is there, else in this process.
@@ -266,6 +281,18 @@ pub fn run_isolated(job: &Job, cancel: Arc<AtomicBool>, progress: Progress) -> R
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn a_worker_killed_by_an_illegal_instruction_is_a_cpu_crash() {
+        let command: Vec<String> = ["sh", "-c", "echo noise >&2; kill -ILL $$", "worker"].map(String::from).into();
+        let job = Job::SyncAudio { subtitle: "a.srt".into(), video: "a.mkv".into(), ffmpeg: "ffmpeg".into() };
+        let result = run_in_worker(&command, &job, Arc::new(AtomicBool::new(false)), Arc::new(|_| {}));
+        match result {
+            Err(Error::Crashed { cpu: true, detail }) => assert!(!detail.contains("noise"), "{detail}"),
+            other => panic!("{other:?}"),
+        }
+    }
 
     #[test]
     fn jobs_and_results_travel_as_json() {
@@ -307,7 +334,8 @@ mod tests {
             Arc::default(),
             progress.clone(),
         );
-        assert!(matches!(&r, Err(Error::Other(m)) if m.contains("boom")), "{r:?}");
+        // The worker's last words go to the log, not into the message people see.
+        assert!(matches!(&r, Err(Error::Crashed { cpu: false, detail }) if !detail.contains("boom")), "{r:?}");
         assert_eq!(*seen.lock().unwrap(), vec![0.5]);
 
         let cancel = Arc::new(AtomicBool::new(false));

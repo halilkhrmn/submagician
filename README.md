@@ -34,15 +34,16 @@ out and shows what is new after the update.
 
 ## Use
 
-1. **Choose folder…** or **Open videos…**, drop them on the window, or right-click a folder in
-   your file manager → *Find subtitles with SubMagician* (Settings → File manager adds that
-   entry).
-2. **Get subtitles for all**, or click a video: the panel on the right shows what it has, the
-   subtitles the sources offer (best first) and its timing. **Search as…** finds a wrongly named
-   file under another name.
+1. **Choose folder…** or **Open videos…**, drop them on the window, or right-click a folder or
+   a video in your file manager (Settings → Right-click menu adds SubMagician there and picks
+   its entries: open in SubMagician, get subtitles, sync the subtitle to the audio).
+2. **Get subtitles for all**, or click a video: the panel on the right shows its subtitles as
+   flags and the ones the sources offer, best first, each marked **Exact** (made for this very
+   file), **Good**, **Fair** or **Weak**. **Search as…** finds a wrongly named file under
+   another name.
 3. The subtitle is saved as `Movie.tr.srt` next to `Movie.mkv`; players load it on their own.
-   It is synced to the audio right away. The file it replaced is kept: the undo button in
-   *Timing* puts it back.
+   It is synced to the audio right away. The file it replaced is kept: the undo button next to
+   *Sync to audio* puts it back.
 
 ![Sync](docs/img/sync.png)
 
@@ -51,22 +52,24 @@ More:
 - **Fast sync**: SubMagician first listens to a few short parts across the film at once, which
   is enough for a wrong offset or frame rate (a second or two). Only when scenes were cut or
   added does it read the whole audio, one piece per CPU core. What it heard is remembered, so
-  syncing the same video again is instant. *Sync to audio* works on any subtitle; *To a
-  subtitle…* uses another subtitle that is in sync; ±0.1 s / ±1 s nudge it by hand.
+  syncing the same video again is instant. *Sync to audio* works on any subtitle; *Copy
+  timing…* uses another subtitle that is in sync; ±0.1 s / ±1 s nudge it by hand.
 - **Subtitles inside the video** (MKV/MP4 tracks): **Use the subtitle inside** saves the one in
   your language as a file and syncs it to the audio. Picture tracks (Blu-ray, DVD) cannot be
   used as text.
 - Heavy work (syncing, writing from the audio) runs in a separate process: the window never
   freezes, every video shows its progress, **Stop** ends it at once.
-- **Watch for new videos**: new videos in the folder get their subtitle on their own, once they
-  have finished copying. **Only missing** hides the videos that are done.
-- **From audio** (Whisper, on this computer): when no source has a subtitle, one is written from
-  the speech. Pick and download a model in Settings → Speech; it can also run automatically.
+- **Watch the open folder** (Settings → Library): new videos in the folder get their subtitle
+  on their own, once they have finished copying. **Only videos without a subtitle** hides the
+  ones that are done.
+- **Write from speech** (Whisper, on this computer): when no source has a subtitle, one is written from
+  the speech. The first time it offers to download the speech model; Settings → Speech picks
+  another one, and it can also run automatically.
   Into English it translates any language; other languages are written as spoken.
 
 ### Player plugins
 
-**Player plugins** in the sidebar finds mpv (and mpv.net) and VLC on your computer and installs
+**Settings → Player plugins** finds mpv (and mpv.net) and VLC on your computer and installs
 SubMagician into them with one click. Then:
 
 - **mpv**: a video without a subtitle in your language gets one by itself; **Alt+S** asks for one,

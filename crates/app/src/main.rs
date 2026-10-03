@@ -63,7 +63,7 @@ fn main() -> Result<(), slint::PlatformError> {
 
     let runtime =
         tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().expect("tokio runtime");
-    let initial = std::env::args_os().nth(1).map(std::path::PathBuf::from);
+    let initial = submagician_core::integration::Action::from_args(std::env::args_os().skip(1));
     let controller = controller::Controller::start(&ui, settings, runtime.handle().clone(), initial);
     accept_dropped_files(&ui, controller);
 

@@ -128,6 +128,30 @@ const PIECE: usize = 10 * 60 * RATE;
 const CUT_WINDOW: usize = 30 * RATE;
 const QUIET_FRAME: usize = RATE / 5;
 
+/// The instructions whisper.cpp is built with (see `.cargo/config.toml`). Without this check an
+/// older processor crashes the process with an illegal instruction.
+pub fn cpu_supported() -> Result<()> {
+    #[cfg(target_arch = "x86_64")]
+    {
+        let missing: Vec<&str> = [
+            ("AVX", std::arch::is_x86_feature_detected!("avx")),
+            ("AVX2", std::arch::is_x86_feature_detected!("avx2")),
+            ("FMA", std::arch::is_x86_feature_detected!("fma")),
+            ("F16C", std::arch::is_x86_feature_detected!("f16c")),
+        ]
+        .into_iter()
+        .filter_map(|(name, ok)| (!ok).then_some(name))
+        .collect();
+        if !missing.is_empty() {
+            return Err(Error::Other(format!(
+                "speech recognition needs a processor with {} (most made since 2013); this one does not have it",
+                missing.join(", ")
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Writes down the speech in the first audio track of `video`. With `target == Some("en")` any
 /// language is translated into English; otherwise the text stays in the spoken language, which
 /// is detected. `progress` gets 0.0..=1.0.
@@ -143,6 +167,7 @@ pub fn transcribe(
 
     static LOGGING: Once = Once::new();
     LOGGING.call_once(whisper_rs::install_logging_hooks);
+    cpu_supported()?;
 
     let ctx = WhisperContext::new_with_params(model, WhisperContextParameters::default())
         .map_err(|e| Error::Parse(format!("whisper model: {e}")))?;

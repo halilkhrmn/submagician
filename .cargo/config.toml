@@ -1,0 +1,5 @@
+# whisper.cpp is otherwise built for the CPU of the machine that compiles it (GGML_NATIVE), and
+# a release built on a CI runner with AVX-512 crashes with an illegal instruction elsewhere.
+# Off, it targets AVX2/FMA/F16C (x86-64 CPUs from 2013 on); speech.rs checks for those at run time.
+[env]
+GGML_NATIVE = "OFF"

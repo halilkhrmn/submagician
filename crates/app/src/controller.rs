@@ -151,6 +151,10 @@ struct Shared {
     watch_tx: tokio::sync::mpsc::UnboundedSender<(u64, PathBuf)>,
     /// A newer release found by the update check.
     release: Mutex<Option<submagician_core::update::Release>>,
+    /// What to do once the folder given on the command line is open (right-click menu).
+    after_open: Mutex<Option<integration::Action>>,
+    /// The video to write from the audio once the speech model the user agreed to is there.
+    generate_after_model: Mutex<Option<usize>>,
 }
 
 /// What to sync a subtitle to.
@@ -184,7 +188,12 @@ impl Shared {
 impl Controller {
     /// Wires the window to the core. `initial` is a folder or video given on the command line
     /// (file-manager action); without it the last folder is opened again.
-    pub fn start(ui: &AppWindow, settings: Settings, rt: Handle, initial: Option<PathBuf>) -> Controller {
+    pub fn start(
+        ui: &AppWindow,
+        settings: Settings,
+        rt: Handle,
+        initial: Option<(integration::Action, PathBuf)>,
+    ) -> Controller {
         let last_folder = settings.last_folder.clone();
         apply_settings(ui, &settings);
         ui.global::<AppState>().set_ffmpeg_found(ffmpeg_text(&settings).into());
@@ -206,6 +215,8 @@ impl Controller {
                 watcher: Mutex::new(None),
                 watch_tx,
                 release: Mutex::new(None),
+                after_open: Mutex::new(None),
+                generate_after_model: Mutex::new(None),
             }),
             ui: ui.as_weak(),
             rt,
@@ -303,6 +314,28 @@ impl Controller {
             let c = c.clone();
             move |add| c.set_menu(add)
         });
+        ui.global::<AppState>().on_menu_entries_changed({
+            let c = c.clone();
+            move || {
+                let Some(ui) = c.ui.upgrade() else { return };
+                let state = ui.global::<AppState>();
+                {
+                    let mut s = c.shared.settings.lock().unwrap();
+                    s.menu = integration::MenuEntries {
+                        open: state.get_menu_open(),
+                        get: state.get_menu_get(),
+                        sync: state.get_menu_sync(),
+                    };
+                    if let Err(e) = s.save() {
+                        log::warn!("settings not saved: {e}");
+                    }
+                }
+                // Already in the menu: show the new choice there now.
+                if integration::is_installed() {
+                    c.set_menu(true);
+                }
+            }
+        });
         rt_spawn_watch_worker(&c, watch_rx);
         ui.global::<AppState>().on_toggle_watch({
             let c = c.clone();
@@ -321,14 +354,19 @@ impl Controller {
             let c = c.clone();
             move |i| {
                 let Ok(index) = usize::try_from(i) else { return };
-                let epoch = c.generation();
-                let w = c.clone();
-                c.run_busy(async move {
-                    let _ = w.generate_item(epoch, index).await;
-                });
+                if c.whisper_model().is_none() {
+                    *c.shared.generate_after_model.lock().unwrap() = Some(index);
+                    c.ask_for_model();
+                    return;
+                }
+                c.generate(index);
             }
         });
         ui.global::<AppState>().on_download_model({
+            let c = c.clone();
+            move || c.download_model()
+        });
+        ui.global::<AppState>().on_model_prompt_accept({
             let c = c.clone();
             move || c.download_model()
         });
@@ -386,7 +424,12 @@ impl Controller {
         }
 
         match initial {
-            Some(path) => c.open_path(path),
+            Some((action, path)) => {
+                if action != integration::Action::Open {
+                    *c.shared.after_open.lock().unwrap() = Some(action);
+                }
+                c.open_path(path);
+            }
             None => {
                 if let Some(folder) = last_folder.filter(|f| f.is_dir()) {
                     c.open_folder(folder);
@@ -435,11 +478,74 @@ impl Controller {
         });
     }
 
-    /// Adds or removes "Find subtitles" in the file manager.
+    /// Asks whether to download the speech model chosen in the settings.
+    fn ask_for_model(&self) {
+        let id = self.shared.settings.lock().unwrap().whisper_model.clone();
+        let Some(model) = speech::model(&id) else { return };
+        if let Some(ui) = self.ui.upgrade() {
+            ui.global::<AppState>().set_model_prompt_name(format!("{} ({} MB)", model.id, model.size_mb).into());
+            ui.global::<AppState>().set_model_prompt_visible(true);
+        }
+    }
+
+    /// Writes a subtitle for video `index` from its audio.
+    fn generate(&self, index: usize) {
+        let epoch = self.generation();
+        let w = self.clone();
+        self.run_busy(async move {
+            let _ = w.generate_item(epoch, index).await;
+        });
+    }
+
+    /// Runs what the right-click menu asked for, once the folder or video is open.
+    fn run_after_open(&self) {
+        let Some(action) = self.shared.after_open.lock().unwrap().take() else { return };
+        log::info!("right-click menu: {action:?}");
+        match action {
+            integration::Action::Open => {}
+            integration::Action::Get => self.run_batch(true),
+            integration::Action::Sync => {
+                let epoch = self.generation();
+                let c = self.clone();
+                self.run_busy(async move { c.sync_all(epoch).await });
+            }
+        }
+    }
+
+    /// Syncs the subtitle of every listed video that has one; the others get one first.
+    async fn sync_all(&self, epoch: u64) {
+        let total = self.shared.items.lock().unwrap().len();
+        for i in 0..total {
+            if self.generation() != epoch {
+                return;
+            }
+            if self.shared.cancel.load(Ordering::SeqCst) {
+                self.status(ST_STOPPED, 0, 0, "");
+                return;
+            }
+            self.progress(i as f32 / total as f32);
+            let result = if self.target_subtitle(i).is_some() {
+                self.sync_item(epoch, i, Reference::Audio).await.map(|_| ())
+            } else {
+                let languages = self.languages();
+                self.process_item(epoch, i, true, &languages, false).await.map(|_| ())
+            };
+            match result {
+                Err(Error::Cancelled) => return,
+                Err(e) if is_fatal(&e) => return self.stop_with(e),
+                _ => {}
+            }
+        }
+        self.progress(1.0);
+    }
+
+    /// Adds SubMagician to the file manager's right-click menu (with the chosen entries) or
+    /// takes it out.
     fn set_menu(&self, add: bool) {
         let result = if add {
+            let entries = self.shared.settings.lock().unwrap().menu;
             match integration::current_program() {
-                Some(program) => integration::install(&program),
+                Some(program) => integration::install(&program, entries),
                 None => Err(Error::Io(std::io::Error::other("cannot find SubMagician's own path"))),
             }
         } else {
@@ -508,12 +614,15 @@ impl Controller {
         ui.global::<AppState>().set_progress(0.0);
         self.shared.cancel.store(false, Ordering::SeqCst);
         let weak = self.ui.clone();
+        let c = self.clone();
         self.rt.spawn(async move {
             work.await;
-            let _ = weak.upgrade_in_event_loop(|ui| {
+            let _ = weak.upgrade_in_event_loop(move |ui| {
                 ui.global::<AppState>().set_busy(false);
                 ui.global::<AppState>().set_candidates_loading(false);
                 ui.global::<AppState>().set_progress(0.0);
+                // The scan of a folder opened from the right-click menu is done: its action now.
+                c.run_after_open();
             });
         });
     }
@@ -614,7 +723,7 @@ impl Controller {
                 return;
             }
             let first = c.languages().swap_remove(0);
-            let rows: Vec<FileRow> = {
+            let rows: Vec<RowData> = {
                 let mut items = c.shared.items.lock().unwrap();
                 *items = found.into_iter().map(Item::new).collect();
                 items.iter().map(|it| file_row(&folder, it, &first)).collect()
@@ -623,7 +732,9 @@ impl Controller {
             let select = c.shared.select_after_scan.lock().unwrap().take();
             let selected = select.and_then(|p| c.shared.items.lock().unwrap().iter().position(|it| it.media.path == p));
             let _ = c.ui.upgrade_in_event_loop(move |ui| {
-                ui.global::<AppState>().set_files(ModelRc::new(VecModel::from(rows)));
+                ui.global::<AppState>().set_files(ModelRc::new(VecModel::from(
+                    rows.into_iter().map(RowData::into_row).collect::<Vec<_>>(),
+                )));
                 if let Some(i) = selected {
                     ui.global::<AppState>().set_selected_file(i as i32);
                 }
@@ -912,7 +1023,15 @@ impl Controller {
                 Err(e) => c.status(ST_ERROR, 0, 0, e.to_string()),
             }
             let installed = model.installed().is_some();
-            let _ = c.ui.upgrade_in_event_loop(move |ui| ui.global::<AppState>().set_whisper_installed(installed));
+            let pending = c.shared.generate_after_model.lock().unwrap().take();
+            let next = c.clone();
+            let _ = c.ui.upgrade_in_event_loop(move |ui| {
+                ui.global::<AppState>().set_whisper_installed(installed);
+                if let (true, Some(index)) = (installed, pending) {
+                    // After run_busy has let go of the busy flag.
+                    slint::Timer::single_shot(Duration::ZERO, move || next.generate(index));
+                }
+            });
         });
     }
 
@@ -979,6 +1098,7 @@ impl Controller {
                 return;
             }
             let files = ui.global::<AppState>().get_files();
+            let row = row.into_row();
             match files.as_any().downcast_ref::<VecModel<FileRow>>() {
                 Some(model) => model.push(row),
                 None => {
@@ -1227,6 +1347,15 @@ impl Controller {
             .await
             .map_err(|e| Error::Parse(e.to_string()))?;
         self.set_progress(epoch, index, -1.0);
+        if let Err(Error::Crashed { cpu, detail }) = &result {
+            let (cpu, detail) = (*cpu, detail.clone());
+            let _ = self.ui.upgrade_in_event_loop(move |ui| {
+                let state = ui.global::<AppState>();
+                state.set_crash_cpu(cpu);
+                state.set_crash_detail(detail.into());
+                state.set_crash_visible(true);
+            });
+        }
         result
     }
 
@@ -1331,7 +1460,7 @@ impl Controller {
         let _ = self.ui.upgrade_in_event_loop(move |ui| {
             let files = ui.global::<AppState>().get_files();
             if shared.generation.load(Ordering::SeqCst) == epoch && index < files.row_count() {
-                files.set_row_data(index, row);
+                files.set_row_data(index, row.into_row());
             }
         });
     }
@@ -1358,10 +1487,12 @@ impl Controller {
 
     fn save_settings(&self) {
         let Some(ui) = self.ui.upgrade() else { return };
-        let (engine, languages_changed, normalized) = {
+        let (engine, languages_changed, normalized, wants_model) = {
             let mut s = self.shared.settings.lock().unwrap();
             let before = s.language_codes();
+            let generated_before = s.generate_when_missing;
             read_settings(&ui, &mut s);
+            let wants_model = s.generate_when_missing && !generated_before;
             if let Err(e) = s.save() {
                 log::warn!("settings not saved: {e}");
             }
@@ -1369,8 +1500,11 @@ impl Controller {
             if let Some(book) = submagician_core::applog::global() {
                 book.set_daily(s.detailed_logs);
             }
-            (build_engine(&s), before != codes, codes.join(", "))
+            (build_engine(&s), before != codes, codes.join(", "), wants_model)
         };
+        if wants_model && self.whisper_model().is_none() {
+            self.ask_for_model();
+        }
         *self.shared.engine.lock().unwrap() = engine;
         ui.global::<AppState>().set_ffmpeg_found(ffmpeg_text(&self.shared.settings.lock().unwrap()).into());
         if languages_changed {
@@ -1414,6 +1548,9 @@ fn apply_settings(ui: &AppWindow, s: &Settings) {
     ui.global::<AppState>().set_subdl_api_key(s.subdl_api_key.clone().into());
     ui.global::<AppState>().set_check_updates(s.check_updates);
     ui.global::<AppState>().set_detailed_logs(s.detailed_logs);
+    ui.global::<AppState>().set_menu_open(s.menu.open);
+    ui.global::<AppState>().set_menu_get(s.menu.get);
+    ui.global::<AppState>().set_menu_sync(s.menu.sync);
 }
 
 fn read_settings(ui: &AppWindow, s: &mut Settings) {
@@ -1444,19 +1581,52 @@ fn file_name(path: &Path) -> String {
     path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
 }
 
-fn file_row(root: &Path, it: &Item, first_language: &str) -> FileRow {
+/// A video's row, built on any thread; `FileRow` holds models, which must stay on the UI thread,
+/// so `into_row` makes it there.
+struct RowData {
+    name: String,
+    folder: String,
+    existing: Vec<String>,
+    embedded: Vec<String>,
+    has_wanted: bool,
+    state: i32,
+    detail: String,
+    progress: f32,
+}
+
+impl RowData {
+    fn into_row(self) -> FileRow {
+        let codes = |l: Vec<String>| -> ModelRc<slint::SharedString> {
+            ModelRc::new(VecModel::from(l.into_iter().map(Into::into).collect::<Vec<_>>()))
+        };
+        FileRow {
+            name: self.name.into(),
+            folder: self.folder.into(),
+            existing: self.existing.join(", ").into(),
+            embedded: self.embedded.join(", ").into(),
+            existing_langs: codes(self.existing),
+            embedded_langs: codes(self.embedded),
+            has_wanted: self.has_wanted,
+            state: self.state,
+            detail: self.detail.into(),
+            progress: self.progress,
+        }
+    }
+}
+
+fn file_row(root: &Path, it: &Item, first_language: &str) -> RowData {
     let folder =
         it.media.path.parent().map(|p| p.strip_prefix(root).unwrap_or(p).display().to_string()).unwrap_or_default();
-    let mut langs: Vec<&str> = it.media.existing.iter().map(|s| s.language.unwrap_or("?")).collect();
+    let mut langs: Vec<String> = it.media.existing.iter().map(|s| s.language.unwrap_or("?").to_owned()).collect();
     langs.dedup();
-    FileRow {
-        name: it.media.file_name().into(),
-        folder: folder.into(),
-        existing: langs.join(", ").into(),
-        embedded: it.media.embedded.join(", ").into(),
+    RowData {
+        name: it.media.file_name(),
+        folder,
+        existing: langs,
+        embedded: it.media.embedded.iter().map(|c| (*c).to_owned()).collect(),
         has_wanted: it.media.has_language(first_language),
         state: it.state,
-        detail: it.detail.clone().into(),
+        detail: it.detail.clone(),
         progress: it.progress,
     }
 }
