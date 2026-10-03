@@ -151,6 +151,12 @@ export global Texts {
         return 0;
     }
 
+    // A newer version of a copy that Flatpak or the distribution's package manager updates.
+    public pure function managed-update(version: string, flatpak: bool) -> string {
+        if flatpak { return @tr("SubMagician {} is out. Update it in your software center, or with: flatpak update", version); }
+        return @tr("SubMagician {} is out. Update it with your package manager (dnf, apt) or software center.", version);
+    }
+
     // Tone of a status message.
     public pure function status-tone(kind: int) -> int {
         if kind == 1 || kind == 3 || kind == 4 || kind == 12 || kind == 24 || kind == 26 || kind == 29 || kind == 33 || kind == 36 { return 1; }
@@ -255,11 +261,13 @@ export global AppState {
     callback refresh-players();
 
     // Updates: 0 nothing known, 1 checking, 2 a newer version can be installed here,
-    // 3 a newer version to download by hand (package or portable copy), 4 downloading,
-    // 5 ready: restarting, 6 check failed (update-error)
+    // 3 a newer version to download by hand (portable copy, build from source), 4 downloading,
+    // 5 ready: restarting, 6 check failed (update-error), 7 a newer version comes from the package
+    // manager or Flatpak (update-flatpak)
     in property <int> update-state;
     in property <string> update-version;
     in property <string> update-error;
+    in property <bool> update-flatpak;
     callback check-for-update();
     // Right-click menu entries (Settings → File manager).
     in-out property <bool> menu-open;

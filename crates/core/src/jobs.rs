@@ -269,7 +269,7 @@ fn crash_error(status: &std::process::ExitStatus) -> Error {
 
 /// Runs `job` in a worker process when the command-line tool is there, else in this process.
 pub fn run_isolated(job: &Job, cancel: Arc<AtomicBool>, progress: Progress) -> Result<Done> {
-    match crate::players::cli_command() {
+    match crate::players::worker_command() {
         Some(command) => run_in_worker(&command, job, cancel, progress),
         None => {
             log::info!("no command-line tool next to the app; running the job here");

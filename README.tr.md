@@ -16,6 +16,10 @@ kodlamasını ve zamanlamasını düzeltir ve videonun yanına kaydeder. Windows
   zip.
 - **Linux**: `SubMagician-…-x86_64.AppImage` (çalıştırılabilir yapıp aç) ya da Debian/Ubuntu için
   `.deb` (`sudo apt install ./submagician_….deb`).
+- **Fedora**: `sudo dnf copr enable halilkahraman/SubMagician && sudo dnf install submagician`
+  (güncellemeler `dnf upgrade` ile gelir) ya da sürümdeki `.rpm`.
+- **Flatpak** (her Linux): sürümdeki `SubMagician-…-x86_64.flatpak`,
+  `flatpak install --user ./SubMagician-….flatpak` (Flathub yolda).
 
 Kurulum dosyası ve AppImage kendini günceller: yeni sürüm çıkınca SubMagician haber verir,
 güncellemeden sonra neyin yeni olduğunu gösterir.

@@ -18,6 +18,8 @@ Release notes, newest first. The app shows the sections since the version that r
 - If a background task crashes, SubMagician says so and offers to report it by GitHub or e-mail.
 - Right-click menu: choose its entries in Settings: open in SubMagician, get subtitles in your
   languages, or sync the subtitle to the audio.
+- New packages: Fedora (COPR repository and .rpm) and Flatpak. Copies that dnf or Flatpak
+  update say so instead of offering a download.
 
 ## 0.1.0
 - First release: finds subtitles on OpenSubtitles, SubDL and Addic7ed, picks the one made for

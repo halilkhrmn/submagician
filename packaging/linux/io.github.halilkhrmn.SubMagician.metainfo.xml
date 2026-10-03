@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Software center description (GNOME Software, KDE Discover, Flathub). The Fedora package
+     installs it too, with its own launcher (packaging/fedora/submagician.spec). -->
+<component type="desktop-application">
+  <id>io.github.halilkhrmn.SubMagician</id>
+  <name>SubMagician</name>
+  <summary>Find, fix and sync subtitles for your videos</summary>
+  <developer id="io.github.halilkhrmn">
+    <name>Halil Kahraman</name>
+  </developer>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-only</project_license>
+  <description>
+    <p>
+      SubMagician finds the subtitle made for each of your videos, fixes its text and syncs it to
+      the audio, then saves it next to the video, where every player finds it.
+    </p>
+    <ul>
+      <li>Searches OpenSubtitles, SubDL and Addic7ed and picks the subtitle that fits your exact file, not just its name</li>
+      <li>Fixes broken characters and saves everything as UTF-8</li>
+      <li>Syncs subtitles to the speech in seconds: offset, frame rate and cut scenes</li>
+      <li>Uses subtitles inside the video, or writes one from the audio with Whisper, on your computer</li>
+      <li>Works on whole folders, watches them for new videos, and adds itself to the file manager's right-click menu</li>
+      <li>Plugins for mpv and VLC, and a command-line tool</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">io.github.halilkhrmn.SubMagician.desktop</launchable>
+  <url type="homepage">https://halilkhrmn.github.io/submagician/</url>
+  <url type="bugtracker">https://github.com/halilkhrmn/submagician/issues</url>
+  <url type="vcs-browser">https://github.com/halilkhrmn/submagician</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>A folder of episodes with their subtitles, and the subtitles found for one</caption>
+      <image>https://raw.githubusercontent.com/halilkhrmn/submagician/main/docs/img/main.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Fixing the timing of a subtitle</caption>
+      <image>https://raw.githubusercontent.com/halilkhrmn/submagician/main/docs/img/sync.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Player plugins for mpv and VLC</caption>
+      <image>https://raw.githubusercontent.com/halilkhrmn/submagician/main/docs/img/players.png</image>
+    </screenshot>
+  </screenshots>
+  <categories>
+    <category>AudioVideo</category>
+    <category>Video</category>
+  </categories>
+  <keywords>
+    <keyword>subtitles</keyword>
+    <keyword>srt</keyword>
+    <keyword>captions</keyword>
+    <keyword>sync</keyword>
+    <keyword>whisper</keyword>
+  </keywords>
+  <content_rating type="oars-1.1"/>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">860</display_length>
+  </requires>
+  <provides>
+    <binary>submagician-cli</binary>
+  </provides>
+  <releases>
+    <release version="0.1.1" date="2026-10-03">
+      <description>
+        <p>Writing subtitles from the audio works on any 64-bit PC from 2013 on; a simpler window with flags, clearer buttons with tooltips; right-click menu entries to choose; a dialog when something crashes; Fedora and Flatpak packages.</p>
+      </description>
+    </release>
+    <release version="0.1.0" date="2026-10-03">
+      <description>
+        <p>First release.</p>
+      </description>
+    </release>
+  </releases>
+</component>

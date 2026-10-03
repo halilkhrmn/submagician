@@ -544,8 +544,8 @@ impl Controller {
     fn set_menu(&self, add: bool) {
         let result = if add {
             let entries = self.shared.settings.lock().unwrap().menu;
-            match integration::current_program() {
-                Some(program) => integration::install(&program, entries),
+            match submagician_core::packaging::launch_command() {
+                Some(command) => integration::install(&command, entries),
                 None => Err(Error::Io(std::io::Error::other("cannot find SubMagician's own path"))),
             }
         } else {

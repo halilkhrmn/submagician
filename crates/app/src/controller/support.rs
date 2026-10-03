@@ -98,7 +98,11 @@ impl Controller {
             Some(Format::WindowsInstaller) => "installer",
             Some(Format::AppImage) => "AppImage",
             None if cfg!(windows) => "portable",
-            None => "package or build",
+            None => match (submagician_core::packaging::flatpak_id(), submagician_core::packaging::PACKAGER) {
+                (Some(_), _) => "Flatpak",
+                (None, Some(packager)) => packager,
+                (None, None) => "package or build",
+            },
         };
         let sources: Vec<&str> =
             [(s.use_opensubtitles, "OpenSubtitles"), (s.use_subdl, "SubDL"), (s.use_addic7ed, "Addic7ed")]

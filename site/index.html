@@ -219,6 +219,8 @@
   var portable = find(/-windows-x64-portable\.zip$/i);
   var appimage = find(/\.AppImage$/i);
   var deb = find(/_amd64\.deb$/i);
+  var rpm = find(/\.x86_64\.rpm$/i);
+  var flatpak = find(/\.flatpak$/i);
   var mb = function (a) { return Math.round(a.size / 1048576) + " MB"; };
   var offer = function (name, asset, note) {
     label.textContent = "Download for " + name;
@@ -230,6 +232,8 @@
     ["Windows portable", portable && portable.browser_download_url],
     ["Linux AppImage", appimage && appimage.browser_download_url],
     ["Debian / Ubuntu", deb && deb.browser_download_url],
+    ["Fedora", rpm && rpm.browser_download_url],
+    ["Flatpak", flatpak && flatpak.browser_download_url],
     ["Release notes", rel.html_url]
   ].filter(function (l) { return l[1]; });
   others.textContent = "";

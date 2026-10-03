@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installs a package on a clean system and starts it: `smoke-linux.sh deb|appimage <file>`.
+# Installs a package on a clean system and starts it: `smoke-linux.sh deb|rpm|appimage <file>`.
 # The window must stay up for a few seconds and the command-line tool must answer.
 set -euo pipefail
 kind=$1
@@ -9,6 +9,11 @@ export SLINT_BACKEND=winit-software
 case "$kind" in
 deb)
     apt-get install -y "./$file"
+    app=(submagician)
+    cli=(submagician-cli)
+    ;;
+rpm)
+    dnf -y install "./$file"
     app=(submagician)
     cli=(submagician-cli)
     ;;

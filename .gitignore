@@ -1,2 +1,4 @@
 /target
 *.part
+/packaging/flatpak/cargo-sources.json
+/packaging/flatpak/*.build.yml

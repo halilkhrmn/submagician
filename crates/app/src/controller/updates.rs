@@ -5,6 +5,7 @@ use std::sync::atomic::Ordering;
 
 use slint::ComponentHandle;
 
+use submagician_core::packaging::{self, Manager};
 use submagician_core::update::{self, Format};
 use submagician_core::{APP_REPO, Error, whatsnew};
 
@@ -19,9 +20,11 @@ const MANUAL: i32 = 3;
 const DOWNLOADING: i32 = 4;
 const RESTARTING: i32 = 5;
 const FAILED: i32 = 6;
+const MANAGED: i32 = 7;
 
 impl Controller {
     pub(super) fn wire_updates(&self, state: &AppState) {
+        state.set_update_flatpak(packaging::manager() == Some(Manager::Flatpak));
         state.on_check_for_update({
             let c = self.clone();
             move || c.check_for_update(true)
@@ -78,7 +81,12 @@ impl Controller {
                     let version = release.version().to_owned();
                     log::info!("update available: {version}");
                     *c.shared.release.lock().unwrap() = Some(release);
-                    let state = if Format::current().is_some() { INSTALLABLE } else { MANUAL };
+                    let state = match (Format::current(), packaging::manager()) {
+                        (Some(_), _) => INSTALLABLE,
+                        // Flatpak or dnf/apt update it; a download would not replace it.
+                        (None, Some(_)) => MANAGED,
+                        (None, None) => MANUAL,
+                    };
                     c.set_update_state(state, &version, "");
                 }
                 Ok(None) => {

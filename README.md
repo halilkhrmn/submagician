@@ -16,6 +16,10 @@ From the [website](https://halilkhrmn.github.io/submagician/) or the
   portable zip.
 - **Linux**: `SubMagician-…-x86_64.AppImage` (make it executable and run it), or the `.deb` for
   Debian/Ubuntu (`sudo apt install ./submagician_….deb`).
+- **Fedora**: `sudo dnf copr enable halilkahraman/SubMagician && sudo dnf install submagician`
+  (updates come with `dnf upgrade`), or the `.rpm` from the release.
+- **Flatpak** (any Linux): `SubMagician-…-x86_64.flatpak` from the release,
+  `flatpak install --user ./SubMagician-….flatpak` (Flathub is on the way).
 
 The installer and the AppImage update themselves: SubMagician tells you when a new version is
 out and shows what is new after the update.
