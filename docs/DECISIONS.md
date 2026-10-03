@@ -152,3 +152,7 @@ Numbered, newest last. Each: what, and why.
     with ffmpeg and ffprobe bundled (gyan.dev essentials, SHA-256 checked in the build, GPL text
     included), so syncing works out of the box; the Settings download stays for portable
     copies.
+51. **Built-in root certificates as a fallback** (`core::net`): every HTTP client is built in one
+    place; when the system has no usable CA certificates (a minimal Linux or container), the
+    Mozilla roots in `webpki-root-certs` are used instead of failing. The first release run caught
+    this: the AppImage panicked at start on a clean Ubuntu container.

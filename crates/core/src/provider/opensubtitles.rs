@@ -11,7 +11,7 @@ use serde::Deserialize;
 use serde_json::json;
 use tokio::sync::Mutex;
 
-use super::{BoxFuture, Candidate, Downloaded, Provider, SearchQuery, user_agent};
+use super::{BoxFuture, Candidate, Downloaded, Provider, SearchQuery};
 use crate::archive;
 use crate::{Error, Result};
 
@@ -43,8 +43,7 @@ struct Session {
 impl OpenSubtitles {
     /// `api_key` overrides the built-in key when set; `credentials` are used to log in.
     pub fn new(api_key: Option<String>, credentials: Option<Credentials>) -> Self {
-        let client =
-            Client::builder().user_agent(user_agent()).timeout(Duration::from_secs(30)).build().expect("HTTP client");
+        let client = crate::net::client(Some(Duration::from_secs(30))).expect("HTTP client");
         let api_key = api_key.filter(|k| !k.trim().is_empty()).or(BUILT_IN_KEY.map(str::to_owned));
         let credentials = credentials.filter(|c| !c.username.is_empty() && !c.password.is_empty());
         OpenSubtitles { client, api_key, credentials, session: Mutex::new(None) }

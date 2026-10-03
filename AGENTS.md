@@ -89,6 +89,7 @@ crates/core/   submagician-core, no GUI (shared by app and CLI)
   whatsnew     notes since the last version from changelog/en.md
   report       "Report a problem": text, saved file, GitHub issue / mailto links
   players      mpv / mpv.net / VLC detection and plugin install (scripts from plugins/)
+  net          HTTP clients (system roots, built-in Mozilla roots when the system has none)
 crates/app/    submagician (binary)
   ui/app.slint  window: sidebar (Library, Player plugins, Settings), update banner, dialogs
   ui/state.slint  AppState global (all properties/callbacks), Texts (state codes → @tr text)

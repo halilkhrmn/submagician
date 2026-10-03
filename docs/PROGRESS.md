@@ -22,6 +22,14 @@
 
 ## Work log
 
+### 2026-10-03 — First release run: AppImage start fix
+- Found: the release smoke test started the AppImage on a clean Ubuntu 24.04 container without
+  ca-certificates; building the HTTP client failed and the app panicked, so v0.1.0 was not
+  published (Windows build, installer smoke test and .deb smoke test passed).
+- Done: `core::net` builds every HTTP client, falling back to built-in Mozilla roots.
+- Verified: with `SSL_CERT_FILE`/`SSL_CERT_DIR` pointing at nothing, the old CLI panicked and the
+  new one logged a warning and searched Addic7ed fine; unit test; full test suite.
+
 ### 2026-10-02 — Phase 6: packaging, updates, logs, new interface, plugins, fast sync
 - Done: `core::applog` (errors.log always, daily files on request, panics), `update` (GitHub
   release check, SHA-256 checked download, silent installer / AppImage swap), `whatsnew`,

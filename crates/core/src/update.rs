@@ -89,7 +89,7 @@ pub fn version_lt(a: &str, b: &str) -> bool {
 }
 
 fn client() -> Result<reqwest::Client> {
-    Ok(reqwest::Client::builder().user_agent(crate::provider::user_agent()).timeout(Duration::from_secs(30)).build()?)
+    crate::net::client(Some(Duration::from_secs(30)))
 }
 
 /// The newest release when it is newer than this build. A repository without a public release
@@ -174,10 +174,7 @@ pub async fn download(
 }
 
 fn client_without_timeout() -> Result<reqwest::Client> {
-    Ok(reqwest::Client::builder()
-        .user_agent(crate::provider::user_agent())
-        .connect_timeout(Duration::from_secs(30))
-        .build()?)
+    crate::net::client(None)
 }
 
 fn expected_digest(asset: &Asset) -> Result<String> {

@@ -6,7 +6,7 @@ use std::time::Duration;
 use reqwest::Client;
 use serde::Deserialize;
 
-use super::{BoxFuture, Candidate, Downloaded, Provider, SearchQuery, user_agent};
+use super::{BoxFuture, Candidate, Downloaded, Provider, SearchQuery};
 use crate::{Error, Result, archive};
 
 pub const NAME: &str = "SubDL";
@@ -25,8 +25,7 @@ impl SubDl {
     /// `None` when there is neither a key in the settings nor a built-in one.
     pub fn new(api_key: Option<String>) -> Option<Self> {
         let api_key = api_key.filter(|k| !k.trim().is_empty()).or(BUILT_IN_KEY.map(str::to_owned))?;
-        let client =
-            Client::builder().user_agent(user_agent()).timeout(Duration::from_secs(30)).build().expect("HTTP client");
+        let client = crate::net::client(Some(Duration::from_secs(30))).expect("HTTP client");
         Some(SubDl { client, api_key })
     }
 

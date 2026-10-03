@@ -8,7 +8,7 @@ use reqwest::{Client, StatusCode, Url};
 use serde::Deserialize;
 use tokio::sync::Mutex;
 
-use super::{BoxFuture, Candidate, Downloaded, Provider, SearchQuery, user_agent};
+use super::{BoxFuture, Candidate, Downloaded, Provider, SearchQuery};
 use crate::{Error, Result, archive, lang, name, score};
 
 pub const NAME: &str = "Addic7ed";
@@ -28,8 +28,7 @@ impl Default for Gestdown {
 
 impl Gestdown {
     pub fn new() -> Self {
-        let client =
-            Client::builder().user_agent(user_agent()).timeout(Duration::from_secs(30)).build().expect("HTTP client");
+        let client = crate::net::client(Some(Duration::from_secs(30))).expect("HTTP client");
         Gestdown { client, shows: Mutex::new(HashMap::new()) }
     }
 

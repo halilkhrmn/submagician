@@ -64,7 +64,7 @@ impl Model {
         std::fs::create_dir_all(dir)?;
         let target = self.path_in(dir);
         let part = target.with_extension("part");
-        let client = reqwest::Client::builder().user_agent(crate::provider::user_agent()).build()?;
+        let client = crate::net::client(None)?;
         let mut resp = client.get(format!("{DOWNLOAD_BASE}/{}", self.file)).send().await?.error_for_status()?;
         let total = resp.content_length();
         let mut file = std::fs::File::create(&part)?;
