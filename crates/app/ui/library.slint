@@ -1,14 +1,13 @@
 import { Button, LineEdit, CheckBox, ListView, Palette } from "std-widgets.slint";
 import { Theme, Icons } from "theme.slint";
 import { AppState, Texts } from "state.slint";
-import { Card, EmptyState, FileCard, CandidateCard, Glyph, Badge, ProgressBar, LangFlags, IconButton } from "components.slint";
+import { Card, EmptyState, FileCard, CandidateCard, Glyph, Badge, ProgressBar, LangFlags, IconButton, HelpTip } from "components.slint";
 
 // The selected video: what it has, the subtitles the sources offer, and its timing.
 component DetailsPanel inherits VerticalLayout {
     property <int> index: AppState.selected-file;
     property <bool> has-file: index >= 0 && index < AppState.files.length;
     property <bool> has-subtitle: has-file && AppState.files[index].existing != "";
-    property <bool> show-legend;
     // The timing tools are folded away until asked for.
     property <bool> timing-open;
     spacing: 10px;
@@ -97,10 +96,11 @@ component DetailsPanel inherits VerticalLayout {
                 vertical-alignment: center;
                 horizontal-stretch: 1;
             }
-            IconButton {
-                icon: Icons.question;
-                label: @tr("What do Exact, Good, Fair and Weak mean?");
-                clicked => { root.show-legend = !root.show-legend; }
+            VerticalLayout {
+                alignment: center;
+                HelpTip {
+                    text: @markdown("\{@tr("How well each subtitle fits this video, best first:")}\n\n**\{@tr("Exact")}**: \{@tr("made for this very file, so its timing fits")}\n\n**\{@tr("Good")}**: \{@tr("the same release (group and source)")}\n\n**\{@tr("Fair")}**: \{@tr("the same kind of release")}\n\n**\{@tr("Weak")}**: \{@tr("only the name matches; syncing to the audio usually fixes its timing")}");
+                }
             }
             IconButton {
                 icon: Icons.refresh;
@@ -109,16 +109,17 @@ component DetailsPanel inherits VerticalLayout {
                 clicked => { AppState.search-file(index); }
             }
         }
-        if root.show-legend: Text {
-            text: @tr("How well each subtitle fits this video, best first. Exact: made for this very file, so its timing fits. Good: same release (group and source). Fair: same kind of release. Weak: only the name matches; syncing to the audio usually fixes its timing.");
-            font-size: 11px;
-            color: Theme.muted;
-            wrap: word-wrap;
-        }
-        search-as-edit := LineEdit {
-            enabled: !AppState.busy;
-            placeholder-text: @tr("Wrong film? Search as… (e.g. The Office US S03E07)");
-            accepted(text) => { AppState.search-as(index, text); }
+        HorizontalLayout {
+            spacing: 6px;
+            search-as-edit := LineEdit {
+                enabled: !AppState.busy;
+                placeholder-text: @tr("Wrong film? Search as… (e.g. The Office US S03E07)");
+                accepted(text) => { AppState.search-as(index, text); }
+            }
+            VerticalLayout {
+                alignment: center;
+                HelpTip { text: @markdown("\{@tr("When the file name is wrong or unclear:")}\n\n\{@tr("type the film or episode (title, year or S01E02) and press Enter to search under that name.")}"); }
+            }
         }
         Rectangle {
             vertical-stretch: 1;
@@ -158,6 +159,10 @@ component DetailsPanel inherits VerticalLayout {
                 Tooltip {
                     text: @markdown("\{@tr("Listens to the video's audio and writes the subtitle, on this computer (a few minutes).")}");
                 }
+            }
+            VerticalLayout {
+                alignment: center;
+                HelpTip { text: @markdown("\{@tr("No subtitle fits?")}\n\n\{@tr("SubMagician listens to the video's audio and writes the subtitle itself with Whisper, on this computer.")}\n\n\{@tr("It takes a few minutes; the first time it downloads the speech model.")}"); }
             }
             Rectangle { horizontal-stretch: 1; }
             Button {
@@ -223,6 +228,10 @@ component DetailsPanel inherits VerticalLayout {
                     text: @markdown("\{@tr("Moves the subtitle to match the speech in the video.")}");
                 }
             }
+            VerticalLayout {
+                alignment: center;
+                HelpTip { text: @markdown("\{@tr("Sync to the audio:")}\n\n\{@tr("listens to the video and moves the subtitle to the speech (offset, frame rate, cut scenes).")}\n\n\{@tr("It is changed only when it fits better.")}"); }
+            }
             Button {
                 text: @tr("Copy timing…");
                 icon: Icons.sync;
@@ -233,6 +242,10 @@ component DetailsPanel inherits VerticalLayout {
                 Tooltip {
                     text: @markdown("\{@tr("Takes the timing from another subtitle file that is already in sync.")}");
                 }
+            }
+            VerticalLayout {
+                alignment: center;
+                HelpTip { text: @markdown("\{@tr("Copy timing:")}\n\n\{@tr("pick another subtitle file that is in sync with this video, in any language;")}\n\n\{@tr("its timing is copied to this one.")}"); }
             }
         }
         if root.timing-open: HorizontalLayout {
@@ -251,6 +264,10 @@ component DetailsPanel inherits VerticalLayout {
                 label: @tr("Undo: put back the subtitle that was there before");
                 enabled: !AppState.busy;
                 clicked => { AppState.restore(index); }
+            }
+            VerticalLayout {
+                alignment: center;
+                HelpTip { text: @markdown("\{@tr("Move the subtitle by hand: minus shows it earlier, plus later.")}\n\n\{@tr("The arrow puts back the subtitle that was there before.")}"); }
             }
         }
     }
@@ -295,6 +312,10 @@ export component LibraryPage inherits VerticalLayout {
                 text: @markdown("\{@tr("Saves the best subtitle in your languages next to every video.")}");
             }
         }
+        if !AppState.busy: VerticalLayout {
+            alignment: center;
+            HelpTip { text: @markdown("\{@tr("Get subtitles for all:")}\n\n\{@tr("finds the best subtitle in your languages for every video, saves it next to the video and syncs it to the audio.")}\n\n\{@tr("Videos that already have one are skipped (Settings → Subtitles).")}"); }
+        }
         if !AppState.busy: Button {
             text: @tr("Search all");
             icon: Icons.search;
@@ -304,6 +325,10 @@ export component LibraryPage inherits VerticalLayout {
             Tooltip {
                 text: @markdown("\{@tr("Only shows what the sources have; nothing is downloaded.")}");
             }
+        }
+        if !AppState.busy: VerticalLayout {
+            alignment: center;
+            HelpTip { text: @markdown("\{@tr("Search all: only looks.")}\n\n\{@tr("Every video shows how many subtitles the sources have;")}\n\n\{@tr("nothing is downloaded.")}"); }
         }
         if AppState.busy: Button {
             text: @tr("Stop");
