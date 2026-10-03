@@ -107,6 +107,7 @@ changelog/     en.md: release notes (What's new in the app, GitHub release text)
 installer/     submagician.iss (Inno Setup, per user, ffmpeg bundled)
 packaging/     linux/submagician.desktop
 tools/         build-installer.ps1, build-linux-packages.sh, smoke tests
+site/          landing page (GitHub Pages, .github/workflows/pages.yml), logo.svg = app icon
 docs/          PLAN, PROGRESS, DECISIONS, RELEASING
 ```
 

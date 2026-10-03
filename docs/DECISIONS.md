@@ -152,6 +152,10 @@ Numbered, newest last. Each: what, and why.
     with ffmpeg and ffprobe bundled (gyan.dev essentials, SHA-256 checked in the build, GPL text
     included), so syncing works out of the box; the Settings download stays for portable
     copies.
+50. **Logo: a video frame with two subtitle lines**, nothing else (the owner's choice); the same
+    drawing is the app icon and the website logo. The website is a single static page without a
+    build step; the newest release is read from the GitHub API in the browser, so releasing never
+    needs a site change.
 51. **Built-in root certificates as a fallback** (`core::net`): every HTTP client is built in one
     place; when the system has no usable CA certificates (a minimal Linux or container), the
     Mozilla roots in `webpki-root-certs` are used instead of failing. The first release run caught

@@ -49,6 +49,7 @@ export global Texts {
     // 12 generating from audio, 13 generated (detail = file)
     public pure function file-state(state: int, detail: string) -> string {
         if state == 1 { return @tr("Searching…"); }
+        if state == 2 && detail == "1" { return @tr("1 subtitle found"); }
         if state == 2 { return @tr("{} subtitles found", detail); }
         if state == 3 { return @tr("Nothing found"); }
         if state == 4 { return @tr("Downloading…"); }
