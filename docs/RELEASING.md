@@ -40,10 +40,16 @@ release file, then:
   app, replaces the files and starts it again.
 - AppImage: the new file replaces the running one, which starts it once it has exited.
 
-**While the repository is private**, GitHub answers that request with 404 for anyone without
-access, so installed copies see "no update". Making the repository (or a separate public
-repository that only holds the releases) public turns updates on; with a separate repository,
-change `APP_REPO` in `crates/core/src/lib.rs`.
+The repository is public, so every installed copy sees new releases. (A 404 — no release yet —
+means "no update".)
+
+## Website
+
+`site/` is the landing page at <https://halilkhrmn.github.io/submagician/>, published by
+`.github/workflows/pages.yml` on every push to `main` that changes it (or by hand: Actions →
+Pages → Run workflow). Its download button asks the GitHub API for the newest release and picks
+the file for the visitor's system, so it needs no change when a version is released. One-time
+setup: Settings → Pages → Build and deployment → Source: **GitHub Actions**.
 
 ## Build by hand
 

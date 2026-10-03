@@ -9,7 +9,8 @@ kodlamasını ve zamanlamasını düzeltir ve videonun yanına kaydeder. Windows
 
 ## İndir
 
-[Sürümler sayfasından](https://github.com/halilkhrmn/submagician/releases):
+[Web sitesinden](https://halilkhrmn.github.io/submagician/) ya da
+[sürümler sayfasından](https://github.com/halilkhrmn/submagician/releases):
 
 - **Windows**: `submagician-setup-….exe` (yönetici izni gerekmez, ffmpeg dahil) ya da taşınabilir
   zip.
