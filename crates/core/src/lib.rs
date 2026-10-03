@@ -16,6 +16,7 @@ pub mod jobs;
 pub mod lang;
 pub mod media;
 pub mod name;
+mod net;
 pub mod output;
 pub mod players;
 pub mod probe;

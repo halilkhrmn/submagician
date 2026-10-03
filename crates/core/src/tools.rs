@@ -25,7 +25,7 @@ pub async fn download_ffmpeg(
     progress: &mut (dyn FnMut(u64, Option<u64>) + Send),
 ) -> Result<()> {
     std::fs::create_dir_all(dir)?;
-    let client = reqwest::Client::builder().user_agent(crate::provider::user_agent()).build()?;
+    let client = crate::net::client(None)?;
     let expected = client.get(SHA_URL).send().await?.error_for_status()?.text().await?;
     let expected = expected.split_whitespace().next().unwrap_or_default().to_ascii_lowercase();
     if expected.len() != 64 {

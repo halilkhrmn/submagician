@@ -156,3 +156,7 @@ Numbered, newest last. Each: what, and why.
     drawing is the app icon and the website logo. The website is a single static page without a
     build step; the newest release is read from the GitHub API in the browser, so releasing never
     needs a site change.
+51. **Built-in root certificates as a fallback** (`core::net`): every HTTP client is built in one
+    place; when the system has no usable CA certificates (a minimal Linux or container), the
+    Mozilla roots in `webpki-root-certs` are used instead of failing. The first release run caught
+    this: the AppImage panicked at start on a clean Ubuntu container.
