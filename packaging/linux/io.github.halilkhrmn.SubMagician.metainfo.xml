@@ -65,9 +65,14 @@
     <binary>submagician-cli</binary>
   </provides>
   <releases>
+    <release version="0.1.2" date="2026-10-03">
+      <description>
+        <p>A small ? explains the buttons that need it; more room for the found subtitles; Fedora and Flatpak packages.</p>
+      </description>
+    </release>
     <release version="0.1.1" date="2026-10-03">
       <description>
-        <p>Writing subtitles from the audio works on any 64-bit PC from 2013 on; a simpler window with flags, clearer buttons with tooltips; right-click menu entries to choose; a dialog when something crashes; Fedora and Flatpak packages.</p>
+        <p>Writing subtitles from the audio works on any 64-bit PC from 2013 on; a simpler window with flags; right-click menu entries to choose; a dialog when something crashes.</p>
       </description>
     </release>
     <release version="0.1.0" date="2026-10-03">

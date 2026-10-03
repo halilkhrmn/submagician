@@ -3,6 +3,14 @@
 Release notes, newest first. The app shows the sections since the version that ran before
 ("What's new"), and the release workflow uses the section of the released version.
 
+## 0.1.2
+- A small ? next to the buttons and fields that need it: point at it to see what they do.
+  The ? next to "Subtitles found" explains Exact, Good, Fair and Weak.
+- "Write from speech" is now "Create subtitle from audio". The timing tools fold away under
+  "Timing", and the video's details take two lines, so the found subtitles get more room.
+- New packages: Fedora (COPR repository and .rpm) and Flatpak. Copies that dnf or Flatpak
+  update say so instead of offering a download.
+
 ## 0.1.1
 - Fixed: writing a subtitle from the speech ("From audio") crashed on many processors (the speech engine was built for the build
   server's processor). It now works on any 64-bit PC from 2013 on, and says so clearly when a
@@ -11,15 +19,12 @@ Release notes, newest first. The app shows the sections since the version that r
   player plugins, subfolders and the folder watch moved there.
 - Subtitle languages are shown as flags, and the found subtitles say how well they fit:
   Exact, Good, Fair or Weak (the ? button explains them).
-- Clearer buttons, and a small ? next to them that explains them when you point at it: "From
-  audio" is now "Create subtitle from audio", "To a subtitle…" is "Copy timing…". The timing tools fold away under "Timing", so the found
-  subtitles get more room. Creating from audio asks to download the speech model right there
-  instead of sending you to Settings.
+- "From audio" is now "Write from speech" and "To a subtitle…" is "Copy timing…", each with a
+  short explanation next to it. Writing from speech asks to download the speech model right
+  there instead of sending you to Settings.
 - If a background task crashes, SubMagician says so and offers to report it by GitHub or e-mail.
 - Right-click menu: choose its entries in Settings: open in SubMagician, get subtitles in your
   languages, or sync the subtitle to the audio.
-- New packages: Fedora (COPR repository and .rpm) and Flatpak. Copies that dnf or Flatpak
-  update say so instead of offering a download.
 
 ## 0.1.0
 - First release: finds subtitles on OpenSubtitles, SubDL and Addic7ed, picks the one made for
