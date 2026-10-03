@@ -32,7 +32,13 @@ BuildRequires:  desktop-file-utils
 BuildRequires:  libappstream-glib
 
 Requires:       hicolor-icon-theme
+# winit loads these at run time (dlopen), so rpm does not find them by itself.
 Requires:       libxkbcommon-x11
+Requires:       libX11
+Requires:       libX11-xcb
+Requires:       libXcursor
+Requires:       libXi
+Requires:       libXrandr
 # Syncing to the audio and reading subtitle tracks inside videos: ffmpeg-free from Fedora, or
 # ffmpeg from RPM Fusion.
 Recommends:     /usr/bin/ffmpeg
