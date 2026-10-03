@@ -204,6 +204,9 @@ export component IconButton inherits Rectangle {
         mouse-cursor: pointer;
         clicked => { root.clicked(); }
     }
+    if root.label != "": Tooltip {
+        text: @markdown("\{root.label}");
+    }
     if root.badge: Rectangle {
         x: parent.width - 10px;
         y: 4px;

@@ -11,9 +11,10 @@ Release notes, newest first. The app shows the sections since the version that r
   player plugins, subfolders and the folder watch moved there.
 - Subtitle languages are shown as flags, and the found subtitles say how well they fit:
   Exact, Good, Fair or Weak (the ? button explains them).
-- "From audio" is now "Write from speech" and "To a subtitle…" is "Copy timing…", each with a
-  short explanation next to it. Writing from speech asks to download the speech model right
-  there instead of sending you to Settings.
+- Clearer buttons with tooltips: "From audio" is now "Create subtitle from audio", "To a
+  subtitle…" is "Copy timing…". The timing tools fold away under "Timing", so the found
+  subtitles get more room. Creating from audio asks to download the speech model right there
+  instead of sending you to Settings.
 - If a background task crashes, SubMagician says so and offers to report it by GitHub or e-mail.
 - Right-click menu: choose its entries in Settings: open in SubMagician, get subtitles in your
   languages, or sync the subtitle to the audio.

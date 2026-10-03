@@ -43,8 +43,8 @@ güncellemeden sonra neyin yeni olduğunu gösterir.
    yapılmış), **Good**, **Fair** ya da **Weak** diye işaretlidir. **Search as…** yanlış
    adlandırılmış bir dosyayı başka bir adla arar.
 3. Altyazı `Film.mkv`'nin yanına `Film.tr.srt` olarak kaydedilir; oynatıcılar kendiliğinden
-   yükler. Hemen sese senkronlanır. Yerine geçtiği dosya saklanır: *Sync to audio*'nun yanındaki
-   geri alma düğmesi onu geri koyar.
+   yükler. Hemen sese senkronlanır. Yerine geçtiği dosya saklanır: *Timing* altındaki geri alma
+   düğmesi onu geri koyar.
 
 ![Senkron](docs/img/sync.png)
 
@@ -53,7 +53,7 @@ Dahası:
 - **Hızlı senkron**: SubMagician önce filmin her yerinden birkaç kısa parçayı aynı anda dinler;
   yanlış kayma ya da kare hızı için bu yeter (bir iki saniye). Sahne kesilmiş ya da eklenmişse
   bütün sesi okur, her işlemci çekirdeğine bir parça. Duyduğunu hatırlar, aynı videoyu yeniden
-  senkronlamak anında olur. *Sync to audio* her altyazıda çalışır; *Copy timing…* senkron olan
+  senkronlamak anında olur. *Sync to the audio* her altyazıda çalışır; *Copy timing…* senkron olan
   başka bir altyazıyı kullanır; ±0,1 s / ±1 s elle kaydırır.
 - **Videonun içindeki altyazılar** (MKV/MP4 parçaları): **Use the subtitle inside** senin
   dilindekini dosya olarak kaydeder ve sese senkronlar. Resim parçaları (Blu-ray, DVD) metin
@@ -62,7 +62,7 @@ Dahası:
   ilerlemesini gösterir, **Stop** hemen bitirir.
 - **Açık klasörü izleme** (Settings → Library): klasöre gelen yeni videolar kopyalanması bitince
   altyazısını kendisi alır. **Only videos without a subtitle** işi biten videoları gizler.
-- **Write from speech** (Whisper, bu bilgisayarda): hiçbir kaynakta altyazı yoksa konuşmadan yazılır.
+- **Create subtitle from audio** (Whisper, bu bilgisayarda): hiçbir kaynakta altyazı yoksa konuşmadan yazılır.
   İlk seferde konuşma modelini indirmeyi önerir; Settings → Speech başka bir model seçer,
   otomatik de çalışabilir. İngilizceye her dilden
   çevirir; diğer diller konuşulduğu gibi yazılır.

@@ -179,3 +179,6 @@ Numbered, newest last. Each: what, and why.
 55. **Right-click menu entries are chosen in Settings** (open, get subtitles, sync to audio).
     "Get" and "sync" open the window with the folder or video (`--get` / `--sync`) and start the
     work there, so progress and errors are visible; no hidden background runs.
+56. **Tooltips with Slint's built-in `Tooltip`** (Slint 1.18) on the buttons whose label cannot say
+    everything; labels say what happens ("Create subtitle from audio", "Copy timing…"). Timing
+    tools are folded under one "Timing" line, so the found subtitles get the height.

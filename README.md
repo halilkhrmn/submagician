@@ -42,8 +42,8 @@ out and shows what is new after the update.
    file), **Good**, **Fair** or **Weak**. **Search as…** finds a wrongly named file under
    another name.
 3. The subtitle is saved as `Movie.tr.srt` next to `Movie.mkv`; players load it on their own.
-   It is synced to the audio right away. The file it replaced is kept: the undo button next to
-   *Sync to audio* puts it back.
+   It is synced to the audio right away. The file it replaced is kept: the undo button under
+   *Timing* puts it back.
 
 ![Sync](docs/img/sync.png)
 
@@ -52,7 +52,7 @@ More:
 - **Fast sync**: SubMagician first listens to a few short parts across the film at once, which
   is enough for a wrong offset or frame rate (a second or two). Only when scenes were cut or
   added does it read the whole audio, one piece per CPU core. What it heard is remembered, so
-  syncing the same video again is instant. *Sync to audio* works on any subtitle; *Copy
+  syncing the same video again is instant. *Sync to the audio* works on any subtitle; *Copy
   timing…* uses another subtitle that is in sync; ±0.1 s / ±1 s nudge it by hand.
 - **Subtitles inside the video** (MKV/MP4 tracks): **Use the subtitle inside** saves the one in
   your language as a file and syncs it to the audio. Picture tracks (Blu-ray, DVD) cannot be
@@ -62,7 +62,7 @@ More:
 - **Watch the open folder** (Settings → Library): new videos in the folder get their subtitle
   on their own, once they have finished copying. **Only videos without a subtitle** hides the
   ones that are done.
-- **Write from speech** (Whisper, on this computer): when no source has a subtitle, one is written from
+- **Create subtitle from audio** (Whisper, on this computer): when no source has a subtitle, one is written from
   the speech. The first time it offers to download the speech model; Settings → Speech picks
   another one, and it can also run automatically.
   Into English it translates any language; other languages are written as spoken.
